@@ -1,13 +1,24 @@
 use std::time::Duration;
-use crate::event_handler::EventHandler;
+use winit::application::ApplicationHandler;
+use winit::event_loop::EventLoop;
+use crate::event_handling::EventHandler;
 use crate::rendering::VelloGraphic;
 use crate::game_loop::GameLoop;
 use crate::logic_hook::LogicHook;
 
-mod event_handler;
+mod event_handling;
 mod rendering;
 mod logic_hook;
 mod game_loop;
+
+pub fn new_app() -> impl ApplicationHandler {
+    // Setup a bunch of state:
+    let tick_duration = Duration::from_millis(16);
+
+    let (logic, receiver) = LogicHook::new(GameLoop::new(), tick_duration);
+    let graphics = VelloGraphic::new(receiver, tick_duration);
+    EventHandler::new(graphics, logic)
+}
 
 #[cfg(target_os = "android")]
 #[export_name = "android_main"]
@@ -29,14 +40,12 @@ pub fn main(android_app: winit::platform::android::activity::AndroidApp) {
 
     use winit::platform::android::EventLoopBuilderExtAndroid;
 
-    // Setup a bunch of state:
-    let tick_length = Duration::from_millis(100);
-    let (logic, receiver) = LogicHook::new(GameLoop{}, tick_length);
-    let graphics = VelloGraphic::new(receiver);
-    let mut app = EventHandler::new(graphics, logic);
+    let mut app = new_app();
 
     // Create and run a winit event loop
-    EventLoop::with_user_event().with_android_app(android_app).handle_volume_keys().build().unwrap()
+    EventLoop::with_user_event().with_android_app(android_app).build().unwrap()
         .run_app(&mut app)
         .expect("Couldn't run event loop");
 }
+
+

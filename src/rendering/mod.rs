@@ -1,32 +1,36 @@
+pub mod drawing;
+
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
+use std::time::Duration;
 use vello::{wgpu, AaConfig, Renderer, RendererOptions, Scene};
-use vello::kurbo::{Affine, Circle, Point};
 use vello::peniko::Color;
 use vello::util::{RenderContext, RenderSurface};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
-use crate::event_handler::GraphicHandler;
-use crate::logic_hook::DrawContent;
+use crate::event_handling::GraphicHandler;
+use crate::rendering::drawing::CommandBundle;
 
 pub struct VelloGraphic<'s> {
     context: RenderContext,
     renderers: Vec<Option<Renderer>>,
     surface: Option<RenderSurface<'s>>,
     scene: Scene,
-    incoming_data: Receiver<DrawContent>,
-    last_data: DrawContent,
+    incoming_data: Receiver<CommandBundle>,
+    last_data: CommandBundle,
+    tick_duration: Duration,
 }
 
 impl<'s> VelloGraphic<'s> {
-    pub fn new(incoming_data: Receiver<DrawContent>) -> Self {
+    pub fn new(incoming_data: Receiver<CommandBundle>, tick_duration: Duration) -> Self {
         Self {
             context: RenderContext::new(),
             renderers: vec![],
             surface: None,
             scene: Scene::new(),
             incoming_data,
-            last_data: DrawContent{ pos: Point::new(0.0, 0.0), tick: 0 }
+            last_data: CommandBundle::new_empty(),
+            tick_duration,
         }
     }
 
@@ -37,15 +41,7 @@ impl<'s> VelloGraphic<'s> {
             self.last_data = data;
         }
 
-        let circle = Circle::new(self.last_data.pos, 60.0);
-        let circle_fill_color = Color::rgba(0.9529, 0.5451, 0.6588, 1.);
-        self.scene.fill(
-            vello::peniko::Fill::NonZero,
-            Affine::IDENTITY,
-            circle_fill_color,
-            None,
-            &circle,
-        );
+        self.last_data.append_to_scene(&mut self.scene, &self.tick_duration)
     }
 
     fn create_renderer(ctx: &RenderContext, surface: &RenderSurface) -> Renderer {

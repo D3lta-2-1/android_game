@@ -8,7 +8,7 @@ use winit::window::{Window, WindowId};
 
 pub trait LogicHandler {
     fn exit(&mut self);
-    fn touch_event(&mut self, Touch);
+    fn touch_event(&mut self, touch: Touch);
 }
 
 pub trait GraphicHandler {
