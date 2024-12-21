@@ -1,4 +1,4 @@
-use std::sync::Arc;
+/*use std::sync::Arc;
 use std::time::{Duration, Instant};
 use vello::kurbo::{Affine, Vec2};
 use vello::Scene;
@@ -98,5 +98,14 @@ impl CommandBundle {
         for command in self.commands.iter() {
             command.append_to_scene(scene, t);
         }
+    }
+}*/
+
+
+pub struct CommandBundle {}
+
+impl CommandBundle {
+    pub fn new_empty() -> Self {
+        Self{}
     }
 }

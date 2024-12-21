@@ -1,8 +1,7 @@
 use std::time::Duration;
 use winit::application::ApplicationHandler;
-use winit::event_loop::EventLoop;
 use crate::event_handling::EventHandler;
-use crate::rendering::VelloGraphic;
+use crate::rendering::Graphic;
 use crate::game_loop::GameLoop;
 use crate::logic_hook::LogicHook;
 
@@ -16,7 +15,7 @@ pub fn new_app() -> impl ApplicationHandler {
     let tick_duration = Duration::from_millis(16);
 
     let (logic, receiver) = LogicHook::new(GameLoop::new(), tick_duration);
-    let graphics = VelloGraphic::new(receiver, tick_duration);
+    let graphics = Graphic::new(receiver, tick_duration);
     EventHandler::new(graphics, logic)
 }
 

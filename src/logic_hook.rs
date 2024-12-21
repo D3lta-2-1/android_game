@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use winit::event::Touch;
 use crate::event_handling::LogicHandler;
-use crate::rendering::drawing::{CommandBundle, DrawCommand, Interpolation, Transform};
+use crate::rendering::drawing::CommandBundle;
 
 pub enum InputEvent {
     ExitRequested,
@@ -12,7 +12,7 @@ pub enum InputEvent {
 }
 
 pub enum TickResult {
-    Draw(Vec<DrawCommand>),
+    Draw/*(Vec<DrawCommand>)*/,
     Exit,
 }
 
@@ -67,12 +67,12 @@ impl<T: GameLogic> GameClock<T> {
             next_tick += self.tick_length;
 
             let bundle = match result {
-                TickResult::Draw(commands) => CommandBundle {
+                TickResult::Draw/*(commands)*/ => CommandBundle::new_empty() /*{
                     commands,
                     // TODO: add camera transform
                     camera_transform: Interpolation::None(Transform::from_pos((0.0, 0.0))),
                     tick_start: next_tick,
-                },
+                }*/,
                 TickResult::Exit => break,
             };
             let duration = next_tick.duration_since(Instant::now());

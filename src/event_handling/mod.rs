@@ -97,7 +97,8 @@ impl<Graphic: GraphicHandler, Logic: LogicHandler> ApplicationHandler for EventH
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        self.logic_handler.exit();
         self.graphic_handler.exit();
+        self.logic_handler.exit();
+
     }
 }
