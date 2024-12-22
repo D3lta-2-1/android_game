@@ -22,10 +22,9 @@ epaint = "0.30.0"
 egui = "0.30"
 egui_dock = {git = "https://github.com/bryceberger/egui_dock.git", branch = "egui-0.30"}
 
-
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14.1"
-winit = { version = "0.30.5", features = ["android-native-activity"] }
+winit = { version = "0.30.5", features = ["android-game-activity"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 env_logger = "0.11.5"

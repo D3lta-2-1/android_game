@@ -24,17 +24,13 @@ pub fn new_app() -> impl ApplicationHandler {
 pub fn main(android_app: winit::platform::android::activity::AndroidApp) {
 
     extern crate android_logger;
-    use android_logger::FilterBuilder;
-    use log::LevelFilter::Off;
 
     use log::LevelFilter;
     use android_logger::Config;
     use winit::event_loop::EventLoop;
 
-    let filter = FilterBuilder::new().filter(Some("wgpu_core"), Off).build();
-
     android_logger::init_once(
-        Config::default().with_filter(filter).with_max_level(LevelFilter::Trace),
+        Config::default().with_max_level(LevelFilter::Trace),
     );
 
     use winit::platform::android::EventLoopBuilderExtAndroid;

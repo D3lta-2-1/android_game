@@ -101,7 +101,6 @@ impl RenderContext {
     /** create a surface with a given present mode, if not supported, another mod will be used in fallback...
     *   this also ensure a ``DeviceHandle``, containing respective ``wgpu::Device``, ``wpgu::Adpter`` and ``wgpu::Queue``, will be initiated
     *   all of this can be retried using ``RenderContext::device_handle()``
-    *   ``RenderSurface::resize()`` must be called once to make the surface valid
     **/
     pub async fn create_surface<'w>(&mut self,
                                     target: impl Into<wgpu::SurfaceTarget<'w>>,
@@ -133,11 +132,15 @@ impl RenderContext {
             view_formats: vec![],
         };
 
-        Ok(RenderSurface {
+        let surface = RenderSurface {
             surface,
             config: surface_config,
             associated_device: device_id,
-        })
+        };
+
+        self.configure_surface(&surface);
+
+        Ok(surface)
     }
 
     pub fn configure_surface(&self, surface: &RenderSurface) {
