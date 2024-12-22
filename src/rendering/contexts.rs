@@ -1,6 +1,3 @@
-use std::sync::Arc;
-use winit::window::Window;
-
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DeviceID(usize);
@@ -55,7 +52,13 @@ impl<'s> RenderSurface<'s> {
     pub fn resize(&mut self, ctx: &RenderContext, (width, height): (u32, u32)) {
         self.config.width = width;
         self.config.height = height;
-        ctx.configure_surface(self)
+        if self.is_valid() {
+            ctx.configure_surface(self);
+        }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.config.width > 0 && self.config.height > 0
     }
 }
 
@@ -117,7 +120,7 @@ impl RenderContext {
 
         // chose a texture_format for the swap chain
         let format = formats.into_iter()
-            .find(|format| format.is_srgb()).unwrap();
+            .find(|format| !format.is_srgb() && format.components() == 4).unwrap();
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

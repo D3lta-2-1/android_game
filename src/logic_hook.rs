@@ -1,86 +1,96 @@
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-use winit::event::Touch;
 use crate::event_handling::LogicHandler;
-use crate::rendering::drawing::CommandBundle;
 
-pub enum InputEvent {
-    ExitRequested,
-    Touch(Touch),
-}
-
-pub enum TickResult {
-    Draw/*(Vec<DrawCommand>)*/,
-    Exit,
-}
-
-pub trait GameLogic: Send {
-    fn tick(&mut self, tick: u64, events: impl Iterator<Item = InputEvent>) -> TickResult;
-}
-
-pub struct LogicHook {
-    input_sender: Sender<InputEvent>,
+/**
+ *   ``LogicHook`` is a struct that is used to run the game logic in a separate thread.
+ *   It decomposes game logic and GUI logic into separate threads, allowing the GUI to run at a different rate than the game logic.
+ *   Tick rate is controlled by the tick_length parameter.
+ *   If a tick is longer than the tick_length, the game will slow down. In an attempt to recover ``LogicHook`` will not wait between nexts ticks, and tick as fast as possible.
+ *   To synchronize the game logic and frame rendering, LogicHook extensively use mpsc channels.
+ **/
+pub struct LogicHook<T: SynchronousLoop> {
+    sync_loop: T,
     game_thread: Option<thread::JoinHandle<()>>,
+    keep_running: Arc<AtomicBool>,
 }
 
-impl LogicHook {
-    pub fn new(logic: impl GameLogic + 'static, tick_length: Duration) -> (LogicHook, Receiver<CommandBundle>) {
-        let (input_sender, input_receiver) = mpsc::channel();
-        let (draw_sender, draw_receiver) = mpsc::channel();
+impl<T: SynchronousLoop> LogicHook<T> {
+    // this is kinda ugly... I might look into dynamic dispatching
+    pub fn new((sync_loop, mut logic): (T, impl GameLoop + 'static), tick_length: Duration) -> Self {
+        let keep_running = Arc::new(AtomicBool::new(true));
 
-        let mut clock = GameClock { logic, input_receiver, draw_sender, tick_length };
-        let game_thread = Some(thread::spawn(
-            move || clock.main_loop()
+        let mut game_context = GameContext::new_empty(tick_length, keep_running.clone());
+        let game_thread = Some(thread::spawn(move || { // Logic loop
+            game_context.start();
+            while game_context.wait_until_next_tick() {
+                logic.tick(&game_context);
+            }
+            logic.exit();
+        }
         ));
 
-        let hook = LogicHook { input_sender, game_thread };
-        (hook, draw_receiver)
+        let hook = LogicHook { sync_loop, game_thread, keep_running };
+        hook
     }
 }
 
-impl LogicHandler for LogicHook {
+impl<T: SynchronousLoop> LogicHandler for LogicHook<T> {
+    fn update_gui(&mut self, ctx: &egui::Context, toasts: &mut egui_notify::Toasts) {
+        self.sync_loop.update_gui(ctx, toasts);
+    }
+
     fn exit(&mut self) {
-        self.input_sender.send(InputEvent::ExitRequested).unwrap();
-        self.game_thread.take().unwrap().join().unwrap();
-    }
-
-    fn touch_event(&mut self, touch: Touch) {
-        self.input_sender.send(InputEvent::Touch(touch)).unwrap();
+        self.keep_running.store(false, Ordering::SeqCst);
+        self.sync_loop.exit();
+        self.game_thread.take().unwrap().join().unwrap(); // a thread do not survive the end of the program, so we must wait for it to finish
     }
 }
 
-struct GameClock<T: GameLogic> {
-    logic: T,
-    input_receiver: Receiver<InputEvent>,
-    draw_sender: Sender<CommandBundle>,
+pub struct GameContext {
+    next_tick: Instant,
     tick_length: Duration,
+    tick_count: u64,
+    keep_running: Arc<AtomicBool>
 }
-
-impl<T: GameLogic> GameClock<T> {
-    fn main_loop(&mut self) {
-        let mut tick_count = 0u64;
-        let mut next_tick = Instant::now();
-        loop {
-            let result = self.logic.tick(tick_count, self.input_receiver.try_iter());
-            next_tick += self.tick_length;
-
-            let bundle = match result {
-                TickResult::Draw/*(commands)*/ => CommandBundle::new_empty() /*{
-                    commands,
-                    // TODO: add camera transform
-                    camera_transform: Interpolation::None(Transform::from_pos((0.0, 0.0))),
-                    tick_start: next_tick,
-                }*/,
-                TickResult::Exit => break,
-            };
-            let duration = next_tick.duration_since(Instant::now());
-            thread::sleep(duration);
-            //sent the Bundle 1 tick behind, else we might get interpolation issues
-            self.draw_sender.send(bundle).unwrap();
-            tick_count += 1;
+impl GameContext {
+    fn new_empty(tick_length: Duration, keep_running: Arc<AtomicBool>) -> Self {
+        Self {
+            next_tick: Instant::now(),
+            tick_length,
+            tick_count: 0,
+            keep_running,
         }
     }
+
+    fn start(&mut self) {
+        self.next_tick = Instant::now();
+    }
+
+    fn wait_until_next_tick(&mut self) -> bool {
+        if self.keep_running.load(Ordering::Acquire) {
+            self.next_tick += self.tick_length;
+            let duration = self.next_tick.duration_since(Instant::now());
+            thread::sleep(duration);
+            self.tick_count += 1;
+            true
+        } else {
+            false
+        }
+
+    }
+
 }
 
+pub trait GameLoop: Send {
+    fn tick(&mut self, ctx: &GameContext);
+    fn exit(&mut self){}
+}
+
+pub trait SynchronousLoop {
+    fn update_gui(&mut self, ctx: &egui::Context, toasts: &mut egui_notify::Toasts);
+    //TODO: forward inputs
+    fn exit(&mut self) {}
+}

@@ -99,7 +99,7 @@ impl CommandBundle {
             command.append_to_scene(scene, t);
         }
     }
-}*/
+}
 
 
 pub struct CommandBundle {}
@@ -108,4 +108,4 @@ impl CommandBundle {
     pub fn new_empty() -> Self {
         Self{}
     }
-}
+}*/
