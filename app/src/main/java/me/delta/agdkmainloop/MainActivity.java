@@ -1,19 +1,20 @@
-package co.realfit.agdkmainloop;
+package me.delta.agdkmainloop;
 
-import androidx.appcompat.app.AppCompatActivity;
+
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
-import com.google.androidgamesdk.GameActivity;
+
 
 import android.os.Bundle;
 import android.content.pm.PackageManager;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
-import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
+import com.google.androidgamesdk.GameActivity;
+
 
 public class MainActivity extends GameActivity {
 

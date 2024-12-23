@@ -34,7 +34,7 @@ impl TabViewer for Viewer {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _title: &mut String) {
-        ui.label("morning people!");
+        ui.label("help!");
     }
 }
 
@@ -44,7 +44,7 @@ impl SynchronousLoop for Gui {
     fn update_gui(&mut self, ctx: &egui::Context, toasts: &mut egui_notify::Toasts) {
         egui::TopBottomPanel::bottom("buttons").show(ctx, |ui| {
             if ui.button("toasts").clicked() {
-                toasts.info("Hello, peoples!".to_owned());
+                toasts.info("Hello, people!".to_owned());
             }
         });
         egui_dock::DockArea::new(&mut self.tree)
