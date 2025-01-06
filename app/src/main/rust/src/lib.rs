@@ -1,5 +1,6 @@
 use std::time::Duration;
 use winit::application::ApplicationHandler;
+use crate::device_extension::DeviceExtension;
 use crate::event_handling::EventHandler;
 use crate::rendering::Graphic;
 use crate::game_core::GameCore;
@@ -9,6 +10,7 @@ mod event_handling;
 mod rendering;
 mod logic_hook;
 mod game_core;
+mod device_extension;
 
 pub fn new_app() -> impl ApplicationHandler {
     // Setup a bunch of state:
@@ -30,8 +32,9 @@ pub fn main(android_app: winit::platform::android::activity::AndroidApp) {
     use winit::event_loop::EventLoop;
 
     android_logger::init_once(
-        Config::default().with_max_level(LevelFilter::Trace),
+        Config::default().with_max_level(LevelFilter::Off),
     );
+    DeviceExtension::setup(&android_app);
 
     use winit::platform::android::EventLoopBuilderExtAndroid;
 

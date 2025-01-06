@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::iter::once;
 use std::sync::Arc;
 use egui_wgpu::Renderer;
-use log::trace;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 use crate::event_handling::{EguiDrawingResources, GraphicHandler};
@@ -41,12 +40,10 @@ impl<'s> GraphicHandler for Graphic<'s> {
             let device_handle = self.ctx.get_device_handle(&surface);
             Renderer::new(&device_handle.device, surface.config.format, None, 1, true)
         });
-        trace!("Surface created");
         self.surface = Some(surface);
     }
 
     fn suspended(&mut self) {
-        trace!("Surface destroyed");
         self.surface.take();
     }
 
@@ -65,7 +62,6 @@ impl<'s> GraphicHandler for Graphic<'s> {
         // Get a handle to the device
         let device_handle = self.ctx.get_device_handle(surface);
 
-        trace!("Drawing");
         // Get the surface's texture
         let surface_texture = surface
             .surface

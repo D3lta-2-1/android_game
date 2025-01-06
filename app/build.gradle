@@ -29,7 +29,7 @@ android {
 
     defaultConfig {
         applicationId "me.delta.agdkmainloop"
-        minSdk 28
+        minSdk 30
         targetSdk 34
         versionCode 1
         versionName "1.0"
@@ -59,7 +59,7 @@ apply plugin: 'org.mozilla.rust-android-gradle.rust-android'
 
 
 cargo {
-    module  = "../"       // Or whatever directory contains your Cargo.toml
+    module  = "src/main/rust/" //"../"       // Or whatever directory contains your Cargo.toml
     libname = "the_game"
     targets = ["arm64"]
 }
