@@ -1,7 +1,5 @@
 use std::time::Duration;
-//use env_logger::Env;
 use winit::application::ApplicationHandler;
-//use winit::event_loop::EventLoop;
 use crate::event_handling::EventHandler;
 use crate::rendering::Graphic;
 use crate::game_core::GameCore;
@@ -11,7 +9,6 @@ mod event_handling;
 mod rendering;
 mod logic_hook;
 mod game_core;
-pub mod device_extension;
 
 pub fn new_app() -> impl ApplicationHandler {
     // Setup a bunch of state:

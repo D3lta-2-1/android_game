@@ -7,7 +7,7 @@ use std::sync::Arc;
 use egui_wgpu::Renderer;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
-use crate::event_handling::{EguiDrawingResources, GraphicHandler};
+use crate::event_handling::GraphicHandler;
 use crate::rendering::contexts::{DeviceID, RenderContext, RenderSurface};
 
 pub struct Graphic<'s> {
@@ -53,7 +53,7 @@ impl<'s> GraphicHandler for Graphic<'s> {
         }
     }
 
-    fn draw(&mut self, resources: EguiDrawingResources) {
+    fn draw(&mut self, textures_delta: epaint::textures::TexturesDelta, primitives: Vec<epaint::ClippedPrimitive>, pixels_per_point: f32) {
         let surface = self.surface.as_ref().unwrap();
         if !surface.is_valid() {
             return;
@@ -70,11 +70,6 @@ impl<'s> GraphicHandler for Graphic<'s> {
         let view = surface_texture.texture.create_view(&Default::default());
 
         let egui_renderer = self.renderers.get_mut(&surface.associated_device).unwrap();
-        let EguiDrawingResources {
-            textures_delta,
-            primitives,
-            pixels_per_point,
-        } = resources;
 
         let screen_descriptor = egui_wgpu::ScreenDescriptor {
             size_in_pixels: [

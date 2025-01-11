@@ -1,8 +1,8 @@
 use std::sync::OnceLock;
 use jni::{AttachGuard, JavaVM};
 use jni::objects::{JObject, JValue, JValueGen, JValueOwned};
-use winit::platform::android::activity::AndroidApp;
-
+use winit::event_loop::ActiveEventLoop;
+use winit::platform::android::ActiveEventLoopExtAndroid;
 #[derive(Debug)]
 struct JavaContext {
     java_vm: JavaVM,
@@ -11,27 +11,30 @@ struct JavaContext {
 
 static JAVA_CONTEXT: OnceLock<JavaContext> = OnceLock::new();
 
-pub struct DeviceExtension {
+pub struct DeviceExtensions {
     env: AttachGuard<'static>,
 }
 
-impl DeviceExtension {
-    pub fn setup(android_app: &AndroidApp) {
+impl DeviceExtensions {
 
-        android_app.activity_as_ptr();
-        let activity = unsafe {
-            JObject::from_raw(android_app.activity_as_ptr() as *mut _)
-        };
-        let java_vm = unsafe {
-            JavaVM::from_raw(android_app.vm_as_ptr() as *mut _).unwrap()
-        };
-        JAVA_CONTEXT.set(JavaContext {
-            java_vm,
-            activity,
-        }).unwrap();
+    fn setup(active_event_loop: &ActiveEventLoop) {
+        let _  = JAVA_CONTEXT.get_or_init(|| {
+            let android_app = active_event_loop.android_app();
+            let activity = unsafe {
+                JObject::from_raw(android_app.activity_as_ptr() as *mut _)
+            };
+            let java_vm = unsafe {
+                JavaVM::from_raw(android_app.vm_as_ptr() as *mut _).unwrap()
+            };
+            JavaContext {
+                java_vm,
+                activity,
+            }
+        });
     }
 
-    pub fn new() -> Self {
+    pub fn new(active_event_loop: &ActiveEventLoop) -> Self {
+        Self::setup(active_event_loop);
         let env = JAVA_CONTEXT.get().unwrap().java_vm.attach_current_thread().unwrap();
         Self {
             env,

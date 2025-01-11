@@ -1,0 +1,8 @@
+[package]
+name = "device_extensions"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+jni = "0.21.1"
+winit.workspace = true

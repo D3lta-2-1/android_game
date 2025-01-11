@@ -89,9 +89,8 @@ name = "android_main"
 version = "0.1.0"
 dependencies = [
  "android_logger",
- "env_logger",
  "log",
- "the_game",
+ "main",
  "winit",
 ]
 
@@ -447,6 +446,22 @@ name = "cursor-icon"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96a6ac251f4a2aca6b3f91340350eab87ae57c3f127ffeb585e92bd336717991"
+
+[[package]]
+name = "desktop"
+version = "0.1.0"
+dependencies = [
+ "main",
+ "winit",
+]
+
+[[package]]
+name = "device_extensions"
+version = "0.1.0"
+dependencies = [
+ "jni",
+ "winit",
+]
 
 [[package]]
 name = "dispatch"
@@ -1125,6 +1140,23 @@ name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+
+[[package]]
+name = "main"
+version = "0.1.0"
+dependencies = [
+ "device_extensions",
+ "egui",
+ "egui-notify",
+ "egui-wgpu",
+ "egui-winit",
+ "egui_dock",
+ "env_logger",
+ "epaint",
+ "pollster",
+ "wgpu",
+ "winit",
+]
 
 [[package]]
 name = "malloc_buf"
@@ -1906,24 +1938,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "the_game"
-version = "0.1.0"
-dependencies = [
- "android_logger",
- "egui",
- "egui-notify",
- "egui-wgpu",
- "egui-winit",
- "egui_dock",
- "env_logger",
- "epaint",
- "jni",
- "pollster",
- "wgpu",
- "winit",
 ]
 
 [[package]]

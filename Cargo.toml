@@ -1,3 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["android_app/src/main/rust", "crates/main"]
+members = ["crates/main",
+    "crates/device_extensions",
+    "android_app/src/main/rust", "crates/desktop"]
+
+[workspace.dependencies]
+winit = "0.30.5"
+device_extensions = { path = "crates/device_extensions" }
+main = { path = "crates/main" }
+
+

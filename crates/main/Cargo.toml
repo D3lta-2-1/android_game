@@ -1,5 +1,5 @@
 [package]
-name = "the_game"
+name = "main"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,8 +7,9 @@ edition = "2021"
 crate-type = ["rlib"]
 
 [dependencies]
+winit.workspace = true
+device_extensions.workspace = true  # = { path = "../device_extensions" }
 pollster = "0.4.0"
-winit = "0.30.5"
 wgpu = "23.0.1"
 egui-notify = "0.18.0"
 egui-winit = "0.30.0"
@@ -16,11 +17,7 @@ egui-wgpu = "0.30.0"
 epaint = "0.30.0"
 egui = "0.30"
 egui_dock = {git = "https://github.com/bryceberger/egui_dock.git", branch = "egui-0.30"}
-jni = "0.21.1"
 
-[target.'cfg(target_os = "android")'.dependencies]
-android_logger = "0.14.1"
-winit = { version = "0.30.5", features = ["android-game-activity"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 env_logger = "0.11.5"

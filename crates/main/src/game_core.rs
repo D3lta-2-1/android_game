@@ -33,7 +33,8 @@ impl TabViewer for Viewer {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _title: &mut String) {
-        ui.label("this text has been changed!");
+        ui.label("Welcome on my newly rust-made android app!");
+        ui.label("Here a bunch of garbage !");
     }
 }
 
