@@ -4,6 +4,7 @@ use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{DeviceEvent, DeviceId, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowId};
+use crate::device_extension::DeviceExtension;
 
 pub trait LogicHandler {
     /// Called on each frame, should not be used to process game logic
@@ -64,6 +65,7 @@ pub struct EventHandler<Graphic: GraphicHandler, Logic: LogicHandler> {
     toasts: egui_notify::Toasts,
     deferred_init: Option<DeferredInit>,
     activity: Activity,
+    device_extension: DeviceExtension,
 }
 
 impl<Graphic: GraphicHandler, Logic: LogicHandler> EventHandler<Graphic, Logic> {
@@ -75,6 +77,7 @@ impl<Graphic: GraphicHandler, Logic: LogicHandler> EventHandler<Graphic, Logic> 
             toasts: egui_notify::Toasts::default().with_margin(egui::Vec2::new(8.0, 24.0)),
             deferred_init: None,
             activity: Activity::Suspended,
+            device_extension: DeviceExtension::new(),
         }
     }
 }
@@ -104,7 +107,10 @@ impl<Graphic: GraphicHandler, Logic: LogicHandler> ApplicationHandler for EventH
             ..
         } = egui_state.on_window_event(window, &event);
 
-        if consumed { return; }
+        if consumed {
+            self.device_extension.vibrate();
+            return;
+        }
 
         match event {
             WindowEvent::CloseRequested => {

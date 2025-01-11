@@ -1,4 +1,0 @@
-/build
-src/main/jniLibs
-src/main/rust/target
-src/main/rust/.idea

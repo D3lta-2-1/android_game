@@ -1,27 +1,15 @@
 [package]
-name = "the_game"
+name = "android_main"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-#[[bin]]
-#name = "entry_point"
-#path = "src/entry_point.rs"
-
 [dependencies]
-pollster = "0.4.0"
+the_game = { path = "../../../../crates/main" }
 winit = "0.30.5"
-wgpu = "23.0.1"
 log = "0.4.22"
-egui-notify = "0.18.0"
-egui-winit = "0.30.0"
-egui-wgpu = "0.30.0"
-epaint = "0.30.0"
-egui = "0.30"
-egui_dock = {git = "https://github.com/bryceberger/egui_dock.git", branch = "egui-0.30"}
-jni = "0.21.1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14.1"

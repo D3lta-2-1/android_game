@@ -1,8 +1,6 @@
 use egui::WidgetText;
 use egui_dock::TabViewer;
-use crate::device_extension::DeviceExtension;
 use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
-
 
 pub struct GameCore;
 
@@ -15,14 +13,12 @@ impl GameCore {
 
 pub struct Gui {
     tree: egui_dock::DockState<String>,
-    device_extension: DeviceExtension,
 }
 
 impl Gui {
     pub fn new() -> Self {
         Self {
             tree: egui_dock::DockState::new(vec!["README.md".to_owned(), "CHANGELOG.md".to_owned()]),
-            device_extension: DeviceExtension::new(),
         }
     }
 }
@@ -37,17 +33,16 @@ impl TabViewer for Viewer {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _title: &mut String) {
-        ui.label("help!");
+        ui.label("this text has been changed!");
     }
 }
-
-
 
 impl SynchronousLoop for Gui {
     fn update_gui(&mut self, ctx: &egui::Context, toasts: &mut egui_notify::Toasts) {
         egui::TopBottomPanel::bottom("buttons").show(ctx, |ui| {
-            if ui.button("hello crash").clicked() {
-                self.device_extension.vibrate();
+            ui.text_edit_singleline(&mut "other test".to_owned());
+            if ui.button("nothing button").clicked() {
+
             }
             if ui.button("toasts").clicked() {
                 toasts.info("Hello, people!".to_owned());

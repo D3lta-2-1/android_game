@@ -1,25 +1,5 @@
-use std::time::Duration;
-use winit::application::ApplicationHandler;
-use crate::device_extension::DeviceExtension;
-use crate::event_handling::EventHandler;
-use crate::rendering::Graphic;
-use crate::game_core::GameCore;
-use crate::logic_hook::LogicHook;
-
-mod event_handling;
-mod rendering;
-mod logic_hook;
-mod game_core;
-mod device_extension;
-
-pub fn new_app() -> impl ApplicationHandler {
-    // Setup a bunch of state:
-    let tick_duration = Duration::from_millis(16);
-
-    let logic = LogicHook::new(GameCore::new(), tick_duration);
-    let graphics = Graphic::new();
-    EventHandler::new(graphics, logic)
-}
+use the_game::device_extension::DeviceExtension;
+use the_game::new_app;
 
 #[cfg(target_os = "android")]
 #[export_name = "android_main"]

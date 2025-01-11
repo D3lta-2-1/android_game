@@ -32,7 +32,7 @@ public class MainActivity extends GameActivity {
         // Load the native library.
         // The name "android-game" depends on your CMake configuration, must be
         // consistent here and inside AndroidManifect.xml
-        System.loadLibrary("the_game");
+        System.loadLibrary("android_main");
     }
 
     private void hideSystemUI() {
