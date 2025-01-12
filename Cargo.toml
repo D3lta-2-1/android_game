@@ -6,6 +6,8 @@ members = ["crates/main",
 
 [workspace.dependencies]
 winit = "0.30.5"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
 device_extensions = { path = "crates/device_extensions" }
 main = { path = "crates/main" }
 

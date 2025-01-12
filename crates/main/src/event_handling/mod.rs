@@ -1,5 +1,11 @@
+use std::ops::Deref;
 use std::sync::Arc;
 use egui::output::OutputEvent;
+use egui::Widget;
+use tracing::info;
+use tracing_subscriber::{fmt, Registry};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{DeviceEvent, DeviceId, WindowEvent};
@@ -7,10 +13,28 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowId};
 use device_extensions::DeviceExtensions;
 
+pub struct EguiGuiExtendContext {
+    pub context: egui::Context,
+    pub collector: egui_tracing::EventCollector,
+    pub toasts: egui_notify::Toasts,
+}
+
+impl Deref for EguiGuiExtendContext {
+    type Target = egui::Context;
+
+    fn deref(&self) -> &Self::Target {
+        &self.context
+    }
+}
+
+impl EguiGuiExtendContext {
+    pub fn log_widget(&self) -> impl Widget {
+        egui_tracing::Logs::new(self.collector.clone())
+    }
+}
 pub trait LogicHandler {
     /// Called on each frame, should not be used to process game logic
-    fn update_gui(&mut self, ctx: &egui::Context, toasts: &mut egui_notify::Toasts);
-
+    fn update_gui(&mut self, ctx: &mut EguiGuiExtendContext);
     /// invoked when the application is about to exit
     fn exit(&mut self);
 }
@@ -60,19 +84,35 @@ enum Activity {
 pub struct EventHandler<Graphic: GraphicHandler, Logic: LogicHandler> {
     logic_handler: Logic,
     graphic_handler: Graphic,
-    egui_context: egui::Context,
-    toasts: egui_notify::Toasts,
+    extend_ctx: EguiGuiExtendContext,
     deferred_init: Option<DeferredInit>,
     activity: Activity,
 }
 
 impl<Graphic: GraphicHandler, Logic: LogicHandler> EventHandler<Graphic, Logic> {
-    pub fn new(graphic_handler: Graphic, logic_handler: Logic) -> Self {
+    pub fn new(builder: impl FnOnce() -> (Graphic, Logic)) -> Self {
+        // We ensure that the subscriber is set up before any logging is done !
+        let collector = egui_tracing::EventCollector::default();
+        let subscriber = Registry::default()
+            .with(collector.clone())
+            .with(fmt::Layer::default()).init();
+
+        //tracing::subscriber::set_global_default(subscriber).unwrap();
+
+        info!("Starting the application");
+
+        let (graphic_handler, logic_handler) = builder();
+
+        let egui_context = EguiGuiExtendContext {
+            context: egui::Context::default(),
+            collector,
+            toasts: egui_notify::Toasts::default().with_margin(egui::Vec2::new(8.0, 24.0)),
+        };
+
         Self {
             logic_handler,
             graphic_handler,
-            egui_context: egui::Context::default(),
-            toasts: egui_notify::Toasts::default().with_margin(egui::Vec2::new(8.0, 24.0)),
+            extend_ctx: egui_context,
             deferred_init: None,
             activity: Activity::Suspended,
         }
@@ -88,7 +128,7 @@ impl<Graphic: GraphicHandler, Logic: LogicHandler> ApplicationHandler for EventH
         let DeferredInit{
             window,
             ..
-        } = self.deferred_init.get_or_insert_with(|| DeferredInit::new(event_loop, self.egui_context.clone()));
+        } = self.deferred_init.get_or_insert_with(|| DeferredInit::new(event_loop, self.extend_ctx.context.clone()));
         self.graphic_handler.resumed(window.clone());
         self.activity = Activity::Resumed;
         event_loop.set_control_flow(ControlFlow::Poll);
@@ -114,7 +154,7 @@ impl<Graphic: GraphicHandler, Logic: LogicHandler> ApplicationHandler for EventH
             },
             WindowEvent::RedrawRequested => {
                 let mut viewport_info = egui::ViewportInfo::default();
-                egui_winit::update_viewport_info(&mut viewport_info, &self.egui_context, window, false);
+                egui_winit::update_viewport_info(&mut viewport_info, &self.extend_ctx, window, false);
                 let input = egui_state.take_egui_input(&window);
 
                 let egui::FullOutput{
@@ -123,12 +163,12 @@ impl<Graphic: GraphicHandler, Logic: LogicHandler> ApplicationHandler for EventH
                     shapes,
                     pixels_per_point,
                     viewport_output: _,
-                } = self.egui_context.run(input, |ctx| {
-                    self.logic_handler.update_gui(ctx, &mut self.toasts);
-                    self.toasts.show(ctx);
+                } = self.extend_ctx.context.clone().run(input, |ctx| {
+                    self.logic_handler.update_gui(&mut self.extend_ctx);
+                    self.extend_ctx.toasts.show(ctx);
                 });
 
-                let primitives = self.egui_context.tessellate(shapes, pixels_per_point);
+                let primitives = self.extend_ctx.context.tessellate(shapes, pixels_per_point);
                 self.graphic_handler.draw(textures_delta, primitives, pixels_per_point);
 
                 for output  in &platform_output.events {

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-use crate::event_handling::LogicHandler;
+use crate::event_handling::{EguiGuiExtendContext, LogicHandler};
 
 /**
  *   ``LogicHook`` is a struct that is used to run the game logic in a separate thread.
@@ -38,8 +38,8 @@ impl<T: SynchronousLoop> LogicHook<T> {
 }
 
 impl<T: SynchronousLoop> LogicHandler for LogicHook<T> {
-    fn update_gui(&mut self, ctx: &egui::Context, toasts: &mut egui_notify::Toasts) {
-        self.sync_loop.update_gui(ctx, toasts);
+    fn update_gui(&mut self, ctx: &mut EguiGuiExtendContext) {
+        self.sync_loop.update_gui(ctx);
     }
 
     fn exit(&mut self) {
@@ -90,7 +90,7 @@ pub trait GameLoop: Send {
 }
 
 pub trait SynchronousLoop {
-    fn update_gui(&mut self, ctx: &egui::Context, toasts: &mut egui_notify::Toasts);
+    fn update_gui(&mut self, ctx: &mut EguiGuiExtendContext);
     //TODO: forward inputs
     fn exit(&mut self) {}
 }

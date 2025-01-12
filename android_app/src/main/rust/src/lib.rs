@@ -5,14 +5,8 @@ use main::new_app;
 #[export_name = "android_main"]
 pub fn main(android_app: winit::platform::android::activity::AndroidApp) {
     extern crate android_logger;
-    use log::LevelFilter;
-    use android_logger::Config;
     use winit::event_loop::EventLoop;
     use winit::platform::android::EventLoopBuilderExtAndroid;
-
-    android_logger::init_once(
-        Config::default().with_max_level(LevelFilter::Off),
-    );
 
     let mut app = new_app();
 

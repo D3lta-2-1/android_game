@@ -11,23 +11,15 @@ mod logic_hook;
 mod game_core;
 
 pub fn new_app() -> impl ApplicationHandler {
-    // Setup a bunch of state:
-    let tick_duration = Duration::from_millis(16);
+    // = Registry::default() .with(fmt::Layer::default()).init();
 
-    let logic = LogicHook::new(GameCore::new(), tick_duration);
-    let graphics = Graphic::new();
-    EventHandler::new(graphics, logic)
+    // for tracing purposes, nothing should be created before the EventHandler itself
+    EventHandler::new(|| {
+
+        // Setup a bunch of state:
+        let tick_duration = Duration::from_millis(16);
+        let logic = LogicHook::new(GameCore::new(), tick_duration);
+        let graphics = Graphic::new();
+        (graphics, logic)
+    })
 }
-
-/*fn main() {
-    let env = Env::default()
-        .filter_or("egui_renderer", "warn")
-        .write_style_or("MY_LOG_STYLE", "always");
-
-    env_logger::init_from_env(env);
-
-    let mut app = new_app();
-    EventLoop::new().unwrap()
-        .run_app(&mut app)
-        .expect("Couldn't run event loop");
-}*/
