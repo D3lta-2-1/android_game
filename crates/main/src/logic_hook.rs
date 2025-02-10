@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-use crate::event_handling::{EguiGuiExtendContext, LogicHandler};
+use running_context::event_handling::{EguiGuiExtendContext, LogicHandler};
 
 /**
  *   ``LogicHook`` is a struct that is used to run the game logic in a separate thread.

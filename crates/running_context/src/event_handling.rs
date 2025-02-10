@@ -1,9 +1,9 @@
 use std::ops::Deref;
 use std::sync::Arc;
+use egui::epaint;
 use egui::output::OutputEvent;
-use egui::Widget;
 use tracing::info;
-use tracing_subscriber::{fmt, Registry};
+use tracing_subscriber::{fmt, EnvFilter, Registry};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use winit::application::ApplicationHandler;
@@ -15,7 +15,6 @@ use device_extensions::DeviceExtensions;
 
 pub struct EguiGuiExtendContext {
     pub context: egui::Context,
-    pub collector: egui_tracing::EventCollector,
     pub toasts: egui_notify::Toasts,
 }
 
@@ -27,11 +26,6 @@ impl Deref for EguiGuiExtendContext {
     }
 }
 
-impl EguiGuiExtendContext {
-    pub fn log_widget(&self) -> impl Widget {
-        egui_tracing::Logs::new(self.collector.clone())
-    }
-}
 pub trait LogicHandler {
     /// Called on each frame, should not be used to process game logic
     fn update_gui(&mut self, ctx: &mut EguiGuiExtendContext);
@@ -92,12 +86,10 @@ pub struct EventHandler<Graphic: GraphicHandler, Logic: LogicHandler> {
 impl<Graphic: GraphicHandler, Logic: LogicHandler> EventHandler<Graphic, Logic> {
     pub fn new(builder: impl FnOnce() -> (Graphic, Logic)) -> Self {
         // We ensure that the subscriber is set up before any logging is done !
-        let collector = egui_tracing::EventCollector::default();
-        let subscriber = Registry::default()
-            .with(collector.clone())
-            .with(fmt::Layer::default()).init();
-
-        //tracing::subscriber::set_global_default(subscriber).unwrap();
+        Registry::default()
+            .with(fmt::Layer::default())
+            .with(EnvFilter::from_default_env())
+            .init();
 
         info!("Starting the application");
 
@@ -105,7 +97,6 @@ impl<Graphic: GraphicHandler, Logic: LogicHandler> EventHandler<Graphic, Logic> 
 
         let egui_context = EguiGuiExtendContext {
             context: egui::Context::default(),
-            collector,
             toasts: egui_notify::Toasts::default().with_margin(egui::Vec2::new(8.0, 24.0)),
         };
 

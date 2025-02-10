@@ -1,10 +1,8 @@
 use egui::{hex_color, emath, lerp, pos2, remap, vec2, Color32, Frame, Pos2, Rect, Ui, WidgetText};
 use egui_dock::TabViewer;
 use epaint::{PathStroke};
-use crate::event_handling::EguiGuiExtendContext;
+use running_context::event_handling::EguiGuiExtendContext;
 use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
-
-
 
 pub struct GameCore;
 
@@ -18,7 +16,6 @@ impl GameCore {
 enum Tab {
     Main,
     Drawn,
-    Logs,
 }
 
 pub struct Gui {
@@ -28,7 +25,7 @@ pub struct Gui {
 impl Gui {
     pub fn new() -> Self {
         Self {
-            tree: egui_dock::DockState::new(vec![Tab::Main, Tab::Drawn, Tab::Logs]),
+            tree: egui_dock::DockState::new(vec![Tab::Main, Tab::Drawn]),
         }
     }
 }
@@ -81,18 +78,15 @@ fn draw(ui: &mut Ui) {
     });
 }
 
-struct Viewer<'a> {
-    ctx: &'a EguiGuiExtendContext,
-}
+struct Viewer;
 
-impl<'a> TabViewer for Viewer<'a> {
+impl TabViewer for Viewer {
     type Tab = Tab;
 
     fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
         match tab {
             Tab::Main => "Main".into(),
             Tab::Drawn => "Drawn".into(),
-            Tab::Logs => "Logs".into(),
         }
     }
 
@@ -106,9 +100,6 @@ impl<'a> TabViewer for Viewer<'a> {
             Tab::Drawn => {
                 draw(ui);
             }
-            Tab::Logs => {
-                egui::ScrollArea::horizontal().show(ui, |ui| ui.add(self.ctx.log_widget()));
-            }
         }
     }
 }
@@ -117,7 +108,7 @@ impl SynchronousLoop for Gui {
     fn update_gui(&mut self, ctx: &mut EguiGuiExtendContext) {
         egui_dock::DockArea::new(&mut self.tree)
             .style(egui_dock::Style::from_egui(ctx.style().as_ref()))
-            .show(ctx, &mut Viewer{ ctx });
+            .show(ctx, &mut Viewer{});
     }
 }
 

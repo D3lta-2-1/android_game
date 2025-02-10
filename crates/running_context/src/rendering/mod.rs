@@ -1,9 +1,9 @@
-pub mod drawing;
 mod contexts;
 
 use std::collections::HashMap;
 use std::iter::once;
 use std::sync::Arc;
+use egui::epaint;
 use egui_wgpu::Renderer;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;

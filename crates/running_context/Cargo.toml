@@ -1,0 +1,19 @@
+[package]
+name = "running_context"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+winit.workspace = true
+device_extensions.workspace = true
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+pollster = "0.4.0"
+wgpu = "23.0.1"
+egui-notify = "0.18.0"
+egui-winit = "0.30.0"
+egui-wgpu = "0.30.0"
+egui = { version = "0.30", features = ["color-hex"] }

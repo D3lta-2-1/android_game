@@ -1,23 +1,12 @@
 [package]
 name = "main"
 version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["rlib"]
+edition = "2024"
 
 [dependencies]
+running_context.workspace = true
 winit.workspace = true
-device_extensions.workspace = true  # = { path = "../device_extensions" }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-pollster = "0.4.0"
-wgpu = "23.0.1"
-egui-notify = "0.18.0"
-egui-winit = "0.30.0"
-egui-wgpu = "0.30.0"
+
+egui_dock = {git = "https://github.com/bryceberger/egui_dock.git", branch = "egui-0.30"}
 epaint = "0.30.0"
 egui = { version = "0.30", features = ["color-hex"] }
-# TODO: Properly integrate egui_dock and egui_tracing
-egui_dock = {git = "https://github.com/bryceberger/egui_dock.git", branch = "egui-0.30"}
-egui_tracing = { git = "https://github.com/juh9870/egui_tracing.git", branch = "dev" }

@@ -1,8 +1,15 @@
 [workspace]
 resolver = "2"
-members = ["crates/main",
+members = [
+    # Crates
     "crates/device_extensions",
-    "android_app/src/main/rust", "crates/desktop"]
+    "crates/running_context",
+    "crates/main",
+
+    # Entrypoints
+    "entrypoints/desktop",
+    "entrypoints/android_app/src/main/rust",
+]
 
 [workspace.dependencies]
 winit = "0.30.5"
@@ -10,5 +17,6 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 device_extensions = { path = "crates/device_extensions" }
 main = { path = "crates/main" }
+running_context = { path = "crates/running_context" }
 
 

@@ -9,7 +9,6 @@ buildscript {
     }
 }
 
-
 plugins {
     id 'com.android.application'
     id 'org.mozilla.rust-android-gradle.rust-android' version '0.9.5'
