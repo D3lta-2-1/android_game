@@ -1,17 +1,4 @@
-#[repr(transparent)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DeviceID(usize);
-
-impl From<usize> for DeviceID {
-    fn from(value: usize) -> Self {
-        DeviceID(value)
-    }
-}
-
-impl Into<usize> for DeviceID {
-    fn into(self) -> usize { self.0 }
-}
-
+use wgpu::Features;
 
 pub struct DeviceHandle {
     pub device: wgpu::Device,
@@ -27,9 +14,11 @@ impl DeviceHandle {
             compatible_surface: Some(&surface),
         }).await.unwrap();
 
+        assert!(adapter.features().contains(Features::POLYGON_MODE_LINE)); //TODO: support that properly
+
         let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor{
             label: None, // may add some kind of naming ?
-            required_features: Default::default(),
+            required_features: Features::POLYGON_MODE_LINE,
             required_limits: Default::default(),
             memory_hints: Default::default(),
         }, None).await.unwrap();
@@ -44,8 +33,7 @@ impl DeviceHandle {
 
 pub struct RenderSurface<'s> {
     pub surface: wgpu::Surface<'s>,
-    pub config: wgpu::SurfaceConfiguration,
-    pub associated_device: DeviceID,
+    pub config: wgpu::SurfaceConfiguration
 }
 
 impl<'s> RenderSurface<'s> {
@@ -65,37 +53,29 @@ impl<'s> RenderSurface<'s> {
 pub struct RenderContext {
     instance: wgpu::Instance,
     /* cache devices to reduces resume costs */
-    devices: Vec<DeviceHandle>,
+    device: Option<DeviceHandle>,
 }
 
 impl RenderContext {
     pub fn new() -> Self {
         Self {
             instance: wgpu::Instance::new(wgpu::InstanceDescriptor::default()),
-            devices: Vec::new(),
+            device: None,
         }
     }
 
-    pub fn get_device_handle<'s>(&'s self, surface: &'_ RenderSurface) -> &'s DeviceHandle {
-        self.handle_from_id(surface.associated_device)
-    }
-
-    pub fn handle_from_id(&self, id: DeviceID) -> &DeviceHandle {
-        &self.devices[id.0]
+    pub fn device(&self) -> &DeviceHandle {
+        self.device.as_ref().expect("called to early")
     }
 
     /** get a suitable device for a given Surface, or create one, and return the associated ID**/
-    async fn device_for_surface(&mut self, surface: &wgpu::Surface<'_>) -> DeviceID {
-        let device_id = self.devices.iter()
-            .position(|device| device.adapter.is_surface_supported(&surface));
+    async fn device_for_surface(&mut self, surface: &wgpu::Surface<'_>) {
+        if let Some(device) = &self.device {
+            device.adapter.is_surface_supported(&surface);
+            return;
+        }
 
-        if let Some(device_id) = device_id {
-            return device_id.into();
-        };
-
-        let device = DeviceHandle::new(&self, surface).await;
-        self.devices.push(device);
-        DeviceID(self.devices.len() - 1)
+        self.device = Some(DeviceHandle::new(&self, surface).await);
     }
 
     /** create a surface with a given present mode, if not supported, another mod will be used in fallback...
@@ -109,13 +89,12 @@ impl RenderContext {
         let surface = self.instance.create_surface(target.into())?;
 
         // find or create a suitable device
-        let device_id = self.device_for_surface(&surface).await;
-        let handle = self.handle_from_id(device_id);
+        self.device_for_surface(&surface).await;
 
         let wgpu::SurfaceCapabilities {
             formats,
             ..
-        } = surface.get_capabilities(&handle.adapter);
+        } = surface.get_capabilities(&self.device().adapter);
 
         // chose a texture_format for the swap chain
         let format = formats.into_iter()
@@ -135,7 +114,6 @@ impl RenderContext {
         let surface = RenderSurface {
             surface,
             config: surface_config,
-            associated_device: device_id,
         };
 
         self.configure_surface(&surface);
@@ -144,7 +122,7 @@ impl RenderContext {
     }
 
     pub fn configure_surface(&self, surface: &RenderSurface) {
-        let device = self.get_device_handle(surface);
+        let device = self.device();
         surface.surface.configure(&device.device, &surface.config)
     }
 }

@@ -4,3 +4,4 @@
 /build
 entrypoints/android_app/build
 local.properties
+/android_app

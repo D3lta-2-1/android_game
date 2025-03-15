@@ -1,18 +1,22 @@
 mod contexts;
+mod line_renderer;
 
-use std::collections::HashMap;
 use std::iter::once;
 use std::sync::Arc;
 use egui::epaint;
-use egui_wgpu::Renderer;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 use crate::event_handling::GraphicHandler;
-use crate::rendering::contexts::{DeviceID, RenderContext, RenderSurface};
+use crate::rendering::contexts::{RenderContext, RenderSurface};
 
+
+struct Renderer {
+    egui: egui_wgpu::Renderer,
+    line_renderer: line_renderer::LineRender,
+}
 pub struct Graphic<'s> {
     ctx: RenderContext,
-    renderers: HashMap<DeviceID, Renderer>,
+    renderer: Option<Renderer>,
     surface: Option<RenderSurface<'s>>,
 }
 
@@ -20,7 +24,7 @@ impl<'s> Graphic<'s> {
     pub fn new() -> Self {
         Self {
             ctx: RenderContext::new(),
-            renderers: HashMap::new(),
+            renderer: None,
             surface: None,
         }
     }
@@ -35,10 +39,9 @@ impl<'s> GraphicHandler for Graphic<'s> {
             wgpu::PresentMode::AutoVsync,
         );
         let surface = pollster::block_on(surface_future).expect("Error creating surface");
-        let entry = self.renderers.entry(surface.associated_device);
-        entry.or_insert_with(|| {
-            let device_handle = self.ctx.get_device_handle(&surface);
-            Renderer::new(&device_handle.device, surface.config.format, None, 1, true)
+        self.renderer = Some(Renderer {
+            egui: egui_wgpu::Renderer::new(&self.ctx.device().device, surface.config.format, None, 1, true),
+            line_renderer: line_renderer::LineRender::build(self.ctx.device(), surface.config.format),
         });
         self.surface = Some(surface);
     }
@@ -60,7 +63,7 @@ impl<'s> GraphicHandler for Graphic<'s> {
         }
 
         // Get a handle to the device
-        let device_handle = self.ctx.get_device_handle(surface);
+        let device_handle = self.ctx.device();
 
         // Get the surface's texture
         let surface_texture = surface
@@ -69,7 +72,7 @@ impl<'s> GraphicHandler for Graphic<'s> {
             .expect("failed to get surface texture");
         let view = surface_texture.texture.create_view(&Default::default());
 
-        let egui_renderer = self.renderers.get_mut(&surface.associated_device).unwrap();
+        let renderer = self.renderer.as_mut().unwrap();
 
         let screen_descriptor = egui_wgpu::ScreenDescriptor {
             size_in_pixels: [
@@ -81,11 +84,11 @@ impl<'s> GraphicHandler for Graphic<'s> {
 
         // Update the textures
         for (texture_id, image_delta) in textures_delta.set {
-            egui_renderer.update_texture(&device_handle.device, &device_handle.queue, texture_id, &image_delta);
+            renderer.egui.update_texture(&device_handle.device, &device_handle.queue, texture_id, &image_delta);
         }
 
         let mut encoder = device_handle.device.create_command_encoder(&Default::default());
-        let commands = egui_renderer.update_buffers(&device_handle.device, &device_handle.queue, &mut encoder, &primitives, &screen_descriptor);
+        let commands = renderer.egui.update_buffers(&device_handle.device, &device_handle.queue, &mut encoder, &primitives, &screen_descriptor);
         {
             let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor{
                 label: None,
@@ -109,15 +112,18 @@ impl<'s> GraphicHandler for Graphic<'s> {
                 occlusion_query_set: None,
             });
 
-            egui_renderer.render(
-                &mut render_pass.forget_lifetime(),
+
+            let mut render_pass = render_pass.forget_lifetime();
+            renderer.egui.render(
+                &mut render_pass,
                 &primitives,
                 &screen_descriptor,
             );
+            renderer.line_renderer.draw(&mut render_pass);
         }
 
         for texture_id in textures_delta.free {
-            egui_renderer.free_texture(&texture_id);
+            renderer.egui.free_texture(&texture_id);
         }
 
         device_handle.queue.submit(commands.into_iter().chain(once(encoder.finish())));
