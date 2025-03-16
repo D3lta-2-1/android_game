@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 running_context.workspace = true
 winit.workspace = true
-
+nalgebra = "0.33.2"
 egui_dock = {git = "https://github.com/bryceberger/egui_dock.git", branch = "egui-0.30"}
 epaint = "0.30.0"
 egui = { version = "0.30", features = ["color-hex"] }

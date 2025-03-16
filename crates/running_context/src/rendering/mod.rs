@@ -119,7 +119,7 @@ impl<'s> GraphicHandler for Graphic<'s> {
                 &primitives,
                 &screen_descriptor,
             );
-            renderer.line_renderer.draw(&mut render_pass);
+            // renderer.line_renderer.draw(&mut render_pass); TODO: For now, I don't need rotations nor complexe shapes, so I'll stick with egui's primitives
         }
 
         for texture_id in textures_delta.free {

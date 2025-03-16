@@ -21,7 +21,7 @@ tasks.configureEach { task ->
 }
 
 android {
-    ndkVersion "28.0.12674087" //"25.1.8937393" //
+    ndkVersion "25.1.8937393" //"28.0.12674087" //
 
     compileSdk 34
 
@@ -56,7 +56,7 @@ android {
 apply plugin: 'org.mozilla.rust-android-gradle.rust-android'
 
 cargo {
-    targetDirectory = "../target/"
+    targetDirectory = "../../target/"
     module  = "/."
     libname = "android_main"
     targets = ["arm64"]
