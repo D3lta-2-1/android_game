@@ -39,10 +39,11 @@ impl<'s> GraphicHandler for Graphic<'s> {
             wgpu::PresentMode::AutoVsync,
         );
         let surface = pollster::block_on(surface_future).expect("Error creating surface");
-        self.renderer = Some(Renderer {
+
+        self.renderer = self.renderer.take().or(Some(Renderer {
             egui: egui_wgpu::Renderer::new(&self.ctx.device().device, surface.config.format, None, 1, true),
             line_renderer: line_renderer::LineRender::build(self.ctx.device(), surface.config.format),
-        });
+        }));
         self.surface = Some(surface);
     }
 

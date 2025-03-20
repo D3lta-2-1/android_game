@@ -1,96 +1,167 @@
-use nalgebra::{Matrix1x2, Matrix2, Vector2};
+mod constraints;
+
+use nalgebra::{DMatrix, DVector, Vector2};
+use crate::pendulum::constraints::Constraint;
 
 /// this is my first attempt to implement an impulse solver as described by Erin Catto in 2014
 
 pub struct Body {
     pub position: Vector2<f32>, // m
     velocity: Vector2<f32>, // m/s
-    mass: f32, // kg
-    inv_mass: f32, // kg^-1
-}
-
-impl Body {
-    fn get_inv_mass_matrix(&self) -> Matrix2<f32> {
-        Matrix2::from_diagonal_element(self.inv_mass)
-    }
-
-    fn get_effective_mass(&self, jacobian: Matrix1x2<f32>) -> f32 {
-        let inv_mass = self.get_inv_mass_matrix();
-        let jacobian_t = jacobian.transpose();
-
-        // I'm confused about the use of the "effective mass" term, here, it simply returns the mass itself, (because the only jacobian is the normalized position vector)
-
-        let result = jacobian * inv_mass * jacobian_t;
-        1.0 / result.x
-    }
-}
-
-/// Keep a body at a fixed distance from the origin
-/// C = |p1| - L
-/// dC/dt = (p1/|p1|) * v1
-struct DistanceConstraint {
-    length: f32,
-}
-
-impl DistanceConstraint {
-    fn get_jacobian(&self, body: &Body) -> Matrix1x2<f32> {
-        let p1 = body.position;
-        let p1_norm = p1.normalize().transpose();
-        p1_norm
-    }
-
-    fn constraint(&self, body: &Body) -> f32 {
-        let p1 = body.position;
-        let length = p1.norm();
-        length - self.length
-    }
+    inv_mass: f32, // kg^-1 // inverse mass sound more useful than mass, and a mass of 0 doesn't make any sense
 }
 
 pub struct PendulumSystem {
-    pub body: Body,
-    constraints: DistanceConstraint,
+    pub bodies: Vec<Body>,
+    constraints: Vec<Box<dyn Constraint>>,
     gravity: Vector2<f32>,
-    time_step: f32,
+    pub(crate) time_step: f32,
 }
 
 impl PendulumSystem {
-    pub fn new(time_step: f32) -> Self {
+
+    pub fn simple(time_step: f32) -> Self {
         Self {
-            body: Body {
-                position: Vector2::new(2.0, -2.0),
-                velocity: Vector2::new(0.0, 0.0),
-                mass: 1.0,
-                inv_mass: 1.0,
-            },
-            constraints: DistanceConstraint { length: 1.0 },
-            gravity: Vector2::new(0.0, -9.8),
+            bodies: vec![
+                Body {
+                    position: Vector2::new(1.0, 0.0),
+                    velocity: Vector2::new(0.0, 0.0),
+                    inv_mass: 1.0,
+                },
+            ],
+            constraints: vec![
+                Box::new(constraints::AnchorConstraint {
+                    body: 0,
+                    anchor: Vector2::new(0.0, 0.0),
+                    distance: 1.0,
+                    bias: 0.01,
+                }),
+            ],
+            gravity: Vector2::new(0.0, -9.81),
             time_step,
         }
     }
 
+    pub fn double(time_step: f32) -> Self {
+        Self {
+            bodies: vec![
+                Body {
+                    position: Vector2::new(1.0, 0.0),
+                    velocity: Vector2::new(0.0, 0.0),
+                    inv_mass: 1.0,
+                },
+                Body {
+                    position: Vector2::new(1.0, 1.0),
+                    velocity: Vector2::new(0.0, 0.0),
+                    inv_mass: 1.0,
+                },
+            ],
+            constraints: vec![
+                Box::new(constraints::AnchorConstraint {
+                    body: 0,
+                    anchor: Vector2::new(0.0, 0.0),
+                    distance: 1.0,
+                    bias: 0.01,
+                }),
+                Box::new(constraints::DistanceConstraint {
+                    body_a: 0,
+                    body_b: 1,
+                    distance: 1.0,
+                    bias: 0.01,
+                }),
+            ],
+            gravity: Vector2::new(0.0, -9.81),
+            time_step,
+        }
+    }
+
+    pub fn triple(time_step: f32) -> Self {
+        Self {
+            bodies: vec![
+                Body {
+                    position: Vector2::new(1.0, 0.0),
+                    velocity: Vector2::new(0.0, 4.0),
+                    inv_mass: 1.0,
+                },
+                Body {
+                    position: Vector2::new(1.0, 1.0),
+                    velocity: Vector2::new(0.0, 0.0),
+                    inv_mass: 1.0,
+                },
+                Body {
+                    position: Vector2::new(1.0, 0.0),
+                    velocity: Vector2::new(4.0, 0.0),
+                    inv_mass: 1.0,
+                },
+            ],
+            constraints: vec![
+                Box::new(constraints::AnchorConstraint {
+                    body: 0,
+                    anchor: Vector2::new(0.0, 0.0),
+                    distance: 1.0,
+                    bias: 0.01,
+                }),
+                Box::new(constraints::DistanceConstraint {
+                    body_a: 0,
+                    body_b: 1,
+                    distance: 1.0,
+                    bias: 0.01,
+                }),
+                Box::new(constraints::DistanceConstraint {
+                    body_a: 1,
+                    body_b: 2,
+                    distance: 1.0,
+                    bias: 0.01,
+                }),
+            ],
+            gravity: Vector2::new(0.0, -9.81),
+            time_step,
+        }
+    }
     // there is no broad-phase nor narrow-phase collision detection
 
     pub fn integrate(&mut self) {
         let gravity = self.gravity;
-        let body = &mut self.body;
+        for body in &mut self.bodies {
+            // integrate position, BEFORE velocity
+            body.position += body.velocity * self.time_step;
 
-        // integrate position, BEFORE velocity
-        body.position += body.velocity * self.time_step;
-
-        // integrate velocity, the new velocity violates the constraints, therefore we need to correct it in the solve method
-        body.velocity += gravity * self.time_step;
+            // integrate velocity, the new velocity violates the constraints, therefore we need to correct it in the solve method
+            body.velocity += gravity * self.time_step;
+        }
     }
 
     pub fn solve(&mut self) {
         // when we get here, the new velocity probably violates the constraints
-        let bias = 1.0;
-        let jacobian = self.constraints.get_jacobian(&self.body);
-        let effective_mass = self.body.get_effective_mass(jacobian);
-        let lagrange_multiplier = -effective_mass * ((jacobian * self.body.velocity).x + bias * self.constraints.constraint(&self.body) / self.time_step);
-        let impulse = jacobian.transpose() * lagrange_multiplier;
-
-        // then correct the body's velocity with the impulse
-        self.body.velocity += impulse * self.body.inv_mass;
+        // TODO: use sparse matrix, and find a better way to write theses equations
+        let mut jacobian = DMatrix::zeros(self.constraints.len(), self.bodies.len() * 2);
+        let mut b = DVector::zeros(self.constraints.len());
+        for (i,(row, constraint)) in jacobian.row_iter_mut().zip(self.constraints.iter()).enumerate() {
+            b[i] = constraint.set_partial_derivative(&self.bodies, row);
+        }
+        let mass_matrix = DMatrix::from_fn(self.bodies.len() * 2, self.bodies.len() * 2, |i, j| {
+            if i == j {
+                self.bodies[i >> 1].inv_mass
+            } else {
+                0.0
+            }
+        });
+        let v = DVector::from_fn(self.bodies.len() * 2, |i, _| {
+            if i & 1 == 0 {
+                self.bodies[i >> 1].velocity.x
+            } else {
+                self.bodies[i >> 1].velocity.y
+            }
+        });
+        let jv = jacobian.clone() * v;
+        let k = jacobian.clone() * mass_matrix * jacobian.transpose();
+        let lu = k.lu();
+        let b = -jv + (1.0 / self.time_step) * b;
+        let lambda = lu.solve(&b).unwrap();
+        let correction = jacobian.transpose() * lambda;
+        for (i, body) in self.bodies.iter_mut().enumerate() {
+            body.velocity.x += correction[i * 2];
+            body.velocity.y += correction[i * 2 + 1];
+        }
     }
-
 }

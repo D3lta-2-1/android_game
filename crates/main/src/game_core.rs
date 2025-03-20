@@ -12,8 +12,9 @@ pub struct GameCore;
 
 impl GameCore {
     pub fn new(time_step: Duration) -> (Gui, LogicLoop) {
-        let (sender, receiver) = std::sync::mpsc::channel();
-        (Gui::new(receiver), LogicLoop::new(sender, time_step))
+        let (graphic_sender, graphic_receiver) = std::sync::mpsc::channel();
+        let (event_sender, event_receiver) = std::sync::mpsc::channel();
+        (Gui::new(graphic_receiver, event_sender), LogicLoop::new(graphic_sender, event_receiver, time_step))
     }
 }
 
@@ -24,17 +25,25 @@ enum Tab {
     Pendulum,
 }
 
+enum Event {
+    Simple,
+    Double,
+    Triple
+}
+
 pub struct Gui {
-    receiver: Receiver<Vector2<f32>>,
-    last_pos: Vector2<f32>,
+    graphic_receiver: Receiver<Vec<Vector2<f32>>>,
+    event_sender: Sender<Event>,
+    last_pos: Vec<Vector2<f32>>,
     tree: egui_dock::DockState<Tab>,
 }
 
 impl Gui {
-    pub fn new(receiver: Receiver<Vector2<f32>>) -> Self {
+    pub fn new(receiver: Receiver<Vec<Vector2<f32>>>, event_sender: Sender<Event>) -> Self {
         Self {
-            receiver,
-            last_pos: Vector2::new(0.0, 0.0),
+            graphic_receiver: receiver,
+            event_sender,
+            last_pos: vec![],
             tree: egui_dock::DockState::new(vec![Tab::Pendulum, Tab::Main, Tab::Waves]),
         }
     }
@@ -88,7 +97,7 @@ fn draw_waves(ui: &mut Ui) {
     });
 }
 
-fn draw_pendule(ui: &mut Ui, position: Vector2<f32>) {
+fn draw_pendule(ui: &mut Ui, positions: &[Vector2<f32>]) {
     Frame::canvas(ui.style()).show(ui, |ui| {
         let desired_size = vec2(ui.available_width(), ui.available_height());
         let (_id, rect) = ui.allocate_space(desired_size);
@@ -98,10 +107,10 @@ fn draw_pendule(ui: &mut Ui, position: Vector2<f32>) {
 
         let mut shapes = vec![];
 
-        let mut points: Vec<Pos2> = vec![
-            pos2(0.0, 0.0),
-            pos2(position.x, position.y),
-        ];
+        let iter = std::iter::once(Vector2::new(0.0, 0.0)).chain(positions.iter().copied());
+        let mut points: Vec<Pos2> = iter.map(|position| {
+            pos2(position.x, position.y)
+        }).collect();
 
         points.iter_mut().for_each(|p| {
             p.x *= 70.0;
@@ -122,19 +131,20 @@ fn draw_pendule(ui: &mut Ui, position: Vector2<f32>) {
             PathStroke::new(3.0, Color32::WHITE)
         ));
         shapes.push(epaint::Shape::circle_filled(points[0], 5.0, Color32::BLUE));
-        shapes.push(epaint::Shape::circle_filled(points[1], 10.0, Color32::RED));
-
-
+        for i in 1..points.len() {
+            shapes.push(epaint::Shape::circle_filled(points[i], 7.0, Color32::RED));
+        }
 
         ui.painter().extend(shapes);
     });
 }
 
-struct Viewer {
-    pos: Vector2<f32>,
+struct Viewer<'a> {
+    pos: &'a [Vector2<f32>],
+    sender: &'a Sender<Event>,
 }
 
-impl TabViewer for Viewer {
+impl<'a> TabViewer for Viewer<'a> {
     type Tab = Tab;
 
     fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
@@ -148,8 +158,14 @@ impl TabViewer for Viewer {
     fn ui(&mut self, ui: &mut Ui, tab: &mut Tab) {
         match tab {
             Tab::Main => {
-                ui.text_edit_singleline(&mut "other test".to_owned());
-                    if ui.button("nothing button").clicked() {
+                if ui.button("simple pendulum").clicked() {
+                    self.sender.send(Event::Simple).unwrap();
+                }
+                if ui.button("double pendulum").clicked() {
+                    self.sender.send(Event::Double).unwrap();
+                }
+                if ui.button("triple pendulum").clicked() {
+                    self.sender.send(Event::Triple).unwrap();
                 }
             }
             Tab::Waves => {
@@ -165,36 +181,49 @@ impl TabViewer for Viewer {
 impl SynchronousLoop for Gui {
     fn update_gui(&mut self, ctx: &mut EguiGuiExtendContext) {
 
-        for pos in self.receiver.try_iter() {
+        for pos in self.graphic_receiver.try_iter() {
             self.last_pos = pos;
         }
 
         egui_dock::DockArea::new(&mut self.tree)
             .style(egui_dock::Style::from_egui(ctx.style().as_ref()))
             .show(ctx, &mut Viewer{
-                pos: self.last_pos
+                pos: &self.last_pos,
+                sender: &self.event_sender
             });
     }
 }
 
 pub struct LogicLoop {
     simulation: PendulumSystem,
-    graphic_sender: Sender<Vector2<f32>>
+    graphic_sender: Sender<Vec<Vector2<f32>>>,
+    event_receiver: Receiver<Event>,
 }
 
 impl LogicLoop {
-    pub fn new(graphic_sender: Sender<Vector2<f32>>, tick_step: Duration) -> Self {
+    fn new(graphic_sender: Sender<Vec<Vector2<f32>>>, event_receiver: Receiver<Event>, tick_step: Duration) -> Self {
         Self {
-            simulation: PendulumSystem::new(tick_step.as_secs_f32()),
-            graphic_sender
+            simulation: PendulumSystem::double(tick_step.as_secs_f32()),
+            graphic_sender,
+            event_receiver,
         }
     }
 }
 
 impl GameLoop for LogicLoop {
     fn tick(&mut self, _ctx: &GameContext) {
+
+        if let Ok(event) = self.event_receiver.try_recv() {
+            let time_step = self.simulation.time_step;
+            self.simulation = match event {
+                Event::Simple => PendulumSystem::simple(time_step),
+                Event::Double => PendulumSystem::double(time_step),
+                Event::Triple => PendulumSystem::triple(time_step),
+            };
+        }
+
         self.simulation.integrate();
         self.simulation.solve();
-        self.graphic_sender.send(self.simulation.body.position).unwrap();
+        self.graphic_sender.send(self.simulation.bodies.iter().map(|b| b.position).collect()).unwrap();
     }
 }
