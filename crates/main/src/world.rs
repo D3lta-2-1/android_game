@@ -18,6 +18,7 @@ pub struct World {
     constraints: Vec<Box<dyn Constraint>>,
     gravity: Vector2<f32>,
     pub time_step: f32,
+    age: u32
 }
 
 impl World {
@@ -41,6 +42,7 @@ impl World {
             ],
             gravity: Vector2::new(0.0, -9.81),
             time_step,
+            age: 0,
         }
     }
 
@@ -74,6 +76,7 @@ impl World {
             ],
             gravity: Vector2::new(0.0, -9.81),
             time_step,
+            age: 0,
         }
     }
 
@@ -118,6 +121,7 @@ impl World {
             ],
             gravity: Vector2::new(0.0, -9.81),
             time_step,
+            age: 0,
         }
     }
 
@@ -164,6 +168,7 @@ impl World {
             constraints,
             gravity: Vector2::new(0.0, -9.81),
             time_step,
+            age: 0,
         }
     }
 
@@ -196,12 +201,11 @@ impl World {
             ],
             gravity: Vector2::new(0.0, -9.81),
             time_step,
+            age: 0,
         }
     }
     
     pub fn square(time_step: f32) -> Self {
-
-
         let make = |x, y| {
             Body{
                 position: Vector2::new(x, y),
@@ -223,41 +227,42 @@ impl World {
                     body: 0,
                     anchor: Vector2::new(-1.25, 0.25),
                     distance: 1.5,
-                    bias: 0.01,
+                    bias: 0.1,
                 }),
                 Box::new(constraints::DistanceConstraint {
                     body_a: 0,
                     body_b: 1,
                     distance: f32::sqrt(1.0/8.0),
-                    bias: 0.01,
+                    bias: 0.1,
                 }),
                 Box::new(constraints::DistanceConstraint {
                     body_a: 1,
                     body_b: 2,
                     distance: f32::sqrt(1.0/8.0),
-                    bias: 0.01,
+                    bias: 0.1,
                 }),
                 Box::new(constraints::DistanceConstraint {
                     body_a: 2,
                     body_b: 3,
                     distance: f32::sqrt(1.0/8.0),
-                    bias: 0.01,
+                    bias: 0.1,
                 }),
                 Box::new(constraints::DistanceConstraint {
                     body_a: 3,
                     body_b: 0,
                     distance: f32::sqrt(1.0/8.0),
-                    bias: 0.01,
+                    bias: 0.1,
                 }),
                 Box::new(constraints::DistanceConstraint {
                     body_a: 1,
                     body_b: 3,
                     distance: 0.5,
-                    bias: 0.01,
+                    bias: 0.1,
                 }),
             ],
             gravity: Vector2::new(0.0, -9.8),
             time_step,
+            age: 0,
         }
     }
 
@@ -308,11 +313,18 @@ impl World {
             body.velocity.y += correction[i * 2 + 1] * body.inv_mass;
         }
 
+        let kinetic_energy = self.bodies.iter().map(|b| 0.5 *  (1.0 / b.inv_mass) * b.velocity.norm_squared()).sum();
+        let potential_energy = self.bodies.iter().map(|b| -(1.0 / b.inv_mass) * self.gravity.dot(&b.position)).sum();
 
-        WorldSnapshot {
+        let r = WorldSnapshot {
             pos: self.bodies.iter().map(|b| b.position).collect(),
             links: self.constraints.iter().zip(lambda.as_slice()).map(|(c, v)| (c.widget(), *v)).collect(),
-        }
+            kinetic_energy,
+            potential_energy,
+            date: self.age,
+        };
+        self.age += 1;
+        r
     }
 }
 
@@ -320,4 +332,7 @@ impl World {
 pub struct WorldSnapshot {
     pub pos: Vec<Vector2<f32>>,
     pub links: Vec<(ConstraintWidget, f32)>,
+    pub kinetic_energy: f32,
+    pub potential_energy: f32,
+    pub date: u32,
 }

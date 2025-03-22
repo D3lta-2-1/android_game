@@ -18,5 +18,6 @@ tracing-subscriber = "0.3.19"
 device_extensions = { path = "crates/device_extensions" }
 main = { path = "crates/main" }
 running_context = { path = "crates/running_context" }
+egui = "0.31.1"
 
 

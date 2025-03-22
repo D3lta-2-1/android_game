@@ -15,7 +15,7 @@ use device_extensions::DeviceExtensions;
 
 pub struct EguiGuiExtendContext {
     pub context: egui::Context,
-    pub toasts: egui_notify::Toasts,
+    //pub toasts: egui_notify::Toasts,
 }
 
 impl Deref for EguiGuiExtendContext {
@@ -97,7 +97,7 @@ impl<Graphic: GraphicHandler, Logic: LogicHandler> EventHandler<Graphic, Logic> 
 
         let egui_context = EguiGuiExtendContext {
             context: egui::Context::default(),
-            toasts: egui_notify::Toasts::default().with_margin(egui::Vec2::new(8.0, 24.0)),
+            //toasts: egui_notify::Toasts::default().with_margin(egui::Vec2::new(8.0, 24.0)),
         };
 
         Self {
@@ -154,9 +154,9 @@ impl<Graphic: GraphicHandler, Logic: LogicHandler> ApplicationHandler for EventH
                     shapes,
                     pixels_per_point,
                     viewport_output: _,
-                } = self.extend_ctx.context.clone().run(input, |ctx| {
+                } = self.extend_ctx.context.clone().run(input, |_| {
                     self.logic_handler.update_gui(&mut self.extend_ctx);
-                    self.extend_ctx.toasts.show(ctx);
+                    //self.extend_ctx.toasts.show(ctx);
                 });
 
                 let primitives = self.extend_ctx.context.tessellate(shapes, pixels_per_point);
