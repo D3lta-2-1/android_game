@@ -9,7 +9,7 @@ use crate::logic_hook::LogicHook;
 
 mod logic_hook;
 mod game_core;
-mod pendulum;
+mod world;
 
 pub fn new_app() -> impl ApplicationHandler {
     // for tracing purposes, nothing should be created before the EventHandler itself

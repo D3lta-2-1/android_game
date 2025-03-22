@@ -2,11 +2,12 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use egui::{hex_color, emath, lerp, pos2, remap, vec2, Color32, Frame, Pos2, Rect, Ui, WidgetText};
 use egui_dock::TabViewer;
-use epaint::{PathStroke, Stroke};
+use epaint::PathStroke;
 use nalgebra::Vector2;
 use running_context::event_handling::EguiGuiExtendContext;
 use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
-use crate::pendulum::PendulumSystem;
+use crate::world::{World, WorldSnapshot};
+use crate::world::constraints::ConstraintWidget;
 
 pub struct GameCore;
 
@@ -28,22 +29,25 @@ enum Tab {
 enum Event {
     Simple,
     Double,
-    Triple
+    Triple,
+    Rope,
+    Rail,
+    Square
 }
 
 pub struct Gui {
-    graphic_receiver: Receiver<Vec<Vector2<f32>>>,
+    graphic_receiver: Receiver<WorldSnapshot>,
     event_sender: Sender<Event>,
-    last_pos: Vec<Vector2<f32>>,
+    last_pos: WorldSnapshot,
     tree: egui_dock::DockState<Tab>,
 }
 
 impl Gui {
-    pub fn new(receiver: Receiver<Vec<Vector2<f32>>>, event_sender: Sender<Event>) -> Self {
+    fn new(receiver: Receiver<WorldSnapshot>, event_sender: Sender<Event>) -> Self {
         Self {
             graphic_receiver: receiver,
             event_sender,
-            last_pos: vec![],
+            last_pos: WorldSnapshot::default(),
             tree: egui_dock::DockState::new(vec![Tab::Pendulum, Tab::Main, Tab::Waves]),
         }
     }
@@ -97,50 +101,77 @@ fn draw_waves(ui: &mut Ui) {
     });
 }
 
-fn draw_pendule(ui: &mut Ui, positions: &[Vector2<f32>]) {
+fn draw_simulation(ui: &mut Ui, snapshot: &WorldSnapshot) {
     Frame::canvas(ui.style()).show(ui, |ui| {
         let desired_size = vec2(ui.available_width(), ui.available_height());
         let (_id, rect) = ui.allocate_space(desired_size);
 
         let center= rect.center();
 
+        let to_screen_coordinates = |p : Vector2<f32>| {
+            let mut p = Pos2::new(p.x * 70.0, p.y * -70.0);
+            p += center.to_vec2();
+            p
+        };
 
         let mut shapes = vec![];
 
-        let iter = std::iter::once(Vector2::new(0.0, 0.0)).chain(positions.iter().copied());
-        let mut points: Vec<Pos2> = iter.map(|position| {
-            pos2(position.x, position.y)
-        }).collect();
+        for (widgets, force) in snapshot.links.iter() {
 
-        points.iter_mut().for_each(|p| {
-            p.x *= 70.0;
-            p.y *= -70.0; // because y is inverted on screen
-            *p += center.to_vec2()
-        });
-
-        shapes.push(epaint::Shape::Circle(epaint::CircleShape{
-            center: points[0],
-            radius: 70.0,
-            fill: Color32::from_rgba_premultiplied(0, 0, 0, 0),
-            stroke: Stroke::new(3.0, Color32::DARK_GRAY)
-        }));
+            let lerp_color = if *force >= 0.0 {
+                Color32::WHITE.lerp_to_gamma(Color32::LIGHT_BLUE, *force)
+            } else {
+                Color32::WHITE.lerp_to_gamma(Color32::LIGHT_RED, -*force)
+            };
 
 
-        shapes.push(epaint::Shape::line(
-            points.clone(),
-            PathStroke::new(3.0, Color32::WHITE)
-        ));
-        shapes.push(epaint::Shape::circle_filled(points[0], 5.0, Color32::BLUE));
-        for i in 1..points.len() {
-            shapes.push(epaint::Shape::circle_filled(points[i], 7.0, Color32::RED));
+            match widgets {
+                ConstraintWidget::Link(a, b) => {
+                    let pos_a = snapshot.pos[*a];
+                    let pos_b = snapshot.pos[*b];
+                    shapes.push(epaint::Shape::line_segment(
+                        [to_screen_coordinates(pos_a), to_screen_coordinates(pos_b)],
+                        PathStroke::new(3.0, lerp_color)
+                    ));
+                },
+                ConstraintWidget::Anchor(a, anchor) => {
+                    let pos = to_screen_coordinates(snapshot.pos[*a]);
+                    let anchor = to_screen_coordinates(*anchor);
+
+                    shapes.push(epaint::Shape::line_segment(
+                        [pos, anchor],
+                        PathStroke::new(3.0, lerp_color)
+                    ));
+                    shapes.push(epaint::Shape::circle_filled(
+                        anchor,
+                        5.0,
+                        Color32::BLUE
+                    ))
+                },
+                ConstraintWidget::Horizontal(y) => {
+
+                    let y = y * -70.0 + center.y;
+                    shapes.push(epaint::Shape::line_segment(
+                        [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
+                        PathStroke::new(3.0, Color32::DARK_GRAY)
+                    ));
+                },
+                _ => (),
+            }
         }
-
+        shapes.extend(snapshot.pos.iter().map(|body|
+            epaint::Shape::circle_filled(
+                to_screen_coordinates(*body),
+                7.0,
+                Color32::RED
+            )
+        ));
         ui.painter().extend(shapes);
     });
 }
 
 struct Viewer<'a> {
-    pos: &'a [Vector2<f32>],
+    pos: &'a WorldSnapshot,
     sender: &'a Sender<Event>,
 }
 
@@ -158,21 +189,30 @@ impl<'a> TabViewer for Viewer<'a> {
     fn ui(&mut self, ui: &mut Ui, tab: &mut Tab) {
         match tab {
             Tab::Main => {
-                if ui.button("simple pendulum").clicked() {
+                if ui.button("simple world").clicked() {
                     self.sender.send(Event::Simple).unwrap();
                 }
-                if ui.button("double pendulum").clicked() {
+                if ui.button("double world").clicked() {
                     self.sender.send(Event::Double).unwrap();
                 }
-                if ui.button("triple pendulum").clicked() {
+                if ui.button("triple world").clicked() {
                     self.sender.send(Event::Triple).unwrap();
+                }
+                if ui.button("rope").clicked() {
+                    self.sender.send(Event::Rope).unwrap();
+                }
+                if ui.button("rail").clicked() {
+                    self.sender.send(Event::Rail).unwrap();
+                }
+                if ui.button("square").clicked() {
+                    self.sender.send(Event::Square).unwrap()
                 }
             }
             Tab::Waves => {
                 draw_waves(ui);
             }
             Tab::Pendulum => {
-                draw_pendule(ui, self.pos);
+                draw_simulation(ui, self.pos);
             }
         }
     }
@@ -195,15 +235,15 @@ impl SynchronousLoop for Gui {
 }
 
 pub struct LogicLoop {
-    simulation: PendulumSystem,
-    graphic_sender: Sender<Vec<Vector2<f32>>>,
+    simulation: World,
+    graphic_sender: Sender<WorldSnapshot>,
     event_receiver: Receiver<Event>,
 }
 
 impl LogicLoop {
-    fn new(graphic_sender: Sender<Vec<Vector2<f32>>>, event_receiver: Receiver<Event>, tick_step: Duration) -> Self {
+    fn new(graphic_sender: Sender<WorldSnapshot>, event_receiver: Receiver<Event>, tick_step: Duration) -> Self {
         Self {
-            simulation: PendulumSystem::double(tick_step.as_secs_f32()),
+            simulation: World::double(tick_step.as_secs_f32()),
             graphic_sender,
             event_receiver,
         }
@@ -216,14 +256,17 @@ impl GameLoop for LogicLoop {
         if let Ok(event) = self.event_receiver.try_recv() {
             let time_step = self.simulation.time_step;
             self.simulation = match event {
-                Event::Simple => PendulumSystem::simple(time_step),
-                Event::Double => PendulumSystem::double(time_step),
-                Event::Triple => PendulumSystem::triple(time_step),
+                Event::Simple => World::simple(time_step),
+                Event::Double => World::double(time_step),
+                Event::Triple => World::triple(time_step),
+                Event::Rope => World::rope(time_step),
+                Event::Rail => World::pendulum_in_rail(time_step),
+                Event::Square => World::square(time_step),
             };
         }
 
         self.simulation.integrate();
-        self.simulation.solve();
-        self.graphic_sender.send(self.simulation.bodies.iter().map(|b| b.position).collect()).unwrap();
+        let snapshot = self.simulation.solve();
+        self.graphic_sender.send(snapshot).unwrap();
     }
 }
