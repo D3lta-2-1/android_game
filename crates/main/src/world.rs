@@ -37,7 +37,7 @@ impl World {
                     body: 0,
                     anchor: Vector2::new(0.0, 0.0),
                     distance: 1.0,
-                    bias: 0.01,
+                    bias: 0.5,
                 }),
             ],
             gravity: Vector2::new(0.0, -9.81),
@@ -65,13 +65,13 @@ impl World {
                     body: 0,
                     anchor: Vector2::new(0.0, 0.0),
                     distance: 1.0,
-                    bias: 0.05,
+                    bias: 1.0,
                 }),
                 Box::new(constraints::DistanceConstraint {
                     body_a: 0,
                     body_b: 1,
                     distance: 1.0,
-                    bias: 0.05,
+                    bias: 1.0,
                 }),
             ],
             gravity: Vector2::new(0.0, -9.81),
@@ -104,19 +104,19 @@ impl World {
                     body: 0,
                     anchor: Vector2::new(0.0, 1.0),
                     distance: 1.0,
-                    bias: 0.01,
+                    bias: 1.0,
                 }),
                 Box::new(constraints::DistanceConstraint {
                     body_a: 0,
                     body_b: 1,
                     distance: 1.0,
-                    bias: 0.01,
+                    bias: 1.0,
                 }),
                 Box::new(constraints::DistanceConstraint {
                     body_a: 1,
                     body_b: 2,
                     distance: 1.0,
-                    bias: 0.01,
+                    bias: 1.0,
                 }),
             ],
             gravity: Vector2::new(0.0, -9.81),
@@ -172,6 +172,55 @@ impl World {
         }
     }
 
+
+    pub fn hardened_rope(time_step: f32) -> Self {
+        const N: usize = 30;
+        const DISTANCE: f32 = 0.3;
+
+        let bodies: Vec<Body> = (0..N).map(|i| {
+            Body {
+                position: Vector2::new(((i + 1) as f32) * DISTANCE - N as f32 * DISTANCE * 0.5, 0.0),
+                velocity: Vector2::new(0.0, 10.0),
+                inv_mass: 1.0 / 0.1,
+            }
+        }).collect();
+
+        let constraints: Vec<Box<dyn Constraint>> = iter::once({
+            let b: Box<dyn Constraint> = Box::new(constraints::AnchorConstraint {
+                body: 0,
+                anchor: Vector2::new(-(N as f32 * DISTANCE * 0.5), 0.0),
+                distance: DISTANCE,
+                bias: 0.5,
+            });
+            b
+        }).chain((1..N).map(|i| {
+            let b: Box<dyn Constraint> = Box::new(constraints::DistanceConstraint {
+                body_a: i - 1,
+                body_b: i,
+                distance: DISTANCE,
+                bias: 0.5,
+            });
+            b
+        })).chain(iter::once({
+            let b: Box<dyn Constraint> = Box::new(constraints::AnchorConstraint {
+                body: N - 1,
+                anchor: Vector2::new((N-2) as f32 * DISTANCE * 0.5, 0.0),
+                distance: DISTANCE,
+                bias: 0.5,
+            });
+            b
+        })).collect();
+
+        Self {
+            bodies,
+            constraints,
+            gravity: Vector2::new(0.0, -9.81),
+            time_step,
+            age: 0,
+        }
+    }
+
+
     pub fn pendulum_in_rail(time_step: f32) -> Self {
         Self {
             bodies: vec![
@@ -191,7 +240,7 @@ impl World {
                     body_a: 0,
                     body_b: 1,
                     distance: 1.0,
-                    bias: 0.01,
+                    bias: 1.0,
                 }),
                 Box::new(constraints::HorizontalRail {
                     body: 0,

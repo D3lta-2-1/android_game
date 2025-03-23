@@ -21,7 +21,7 @@ tasks.configureEach { task ->
 }
 
 android {
-    ndkVersion "28.0.12674087" //"25.1.8937393" //
+    //ndkVersion "28.0.12674087" //"25.1.8937393" //
 
     compileSdk 34
 

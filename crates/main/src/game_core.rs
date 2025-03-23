@@ -2,7 +2,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use egui::{vec2, Color32, Frame, Pos2, Ui, WidgetText, Shape, Stroke};
 use egui_dock::TabViewer;
-use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints};
+use egui_plot::{Legend, Line, Plot, PlotPoint};
 use nalgebra::Vector2;
 use running_context::event_handling::EguiGuiExtendContext;
 use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
@@ -32,16 +32,18 @@ enum Event {
     Double,
     Triple,
     Rope,
+    HardenedRope,
     Rail,
     Square
 }
 
 impl Event {
-    const LIST: [Event; 6] = [
+    const LIST: [Event; 7] = [
         Event::Simple,
         Event::Double,
         Event::Triple,
         Event::Rope,
+        Event::HardenedRope,
         Event::Rail,
         Event::Square
     ];
@@ -62,7 +64,7 @@ impl Gui {
                 sender: event_sender,
                 kinetic_energy: vec![],
                 potential_energy: vec![],
-                mecanical_energy: vec![],
+                mechanical_energy: vec![],
             },
             tree: egui_dock::DockState::new(vec![Tab::World, Tab::Button, Tab::Plots]),
         }
@@ -74,7 +76,7 @@ struct DockViewer {
     sender: Sender<Event>,
     kinetic_energy: Vec<PlotPoint>,
     potential_energy: Vec<PlotPoint>,
-    mecanical_energy: Vec<PlotPoint>,
+    mechanical_energy: Vec<PlotPoint>,
 }
 
 impl TabViewer for DockViewer {
@@ -104,7 +106,7 @@ impl DockViewer {
                 self.sender.send(event).unwrap();
                 self.kinetic_energy.clear();
                 self.potential_energy.clear();
-                self.mecanical_energy.clear();
+                self.mechanical_energy.clear();
             }
         }
     }
@@ -179,14 +181,14 @@ impl DockViewer {
     fn draw_plot(&self, ui: &mut Ui) {
         let mut plot = Plot::new("my_plot").legend(Legend::default());
 
-        if self.kinetic_energy.is_empty() {
+        if self.kinetic_energy.len() <= 50 { // TODO: this is an ugly why to reset the plot, it would be better to keep track of when a button is pressed
             plot = plot.reset();
         }
 
         plot.show(ui, |plot_ui| {
             let kinetic = Line::new(self.kinetic_energy.as_ref()).name("Kinetic Energy");
             let potential = Line::new(self.potential_energy.as_ref()).name("Potential Energy");
-            let mechanical = Line::new(self.mecanical_energy.as_ref()).name("Mechanical Energy");
+            let mechanical = Line::new(self.mechanical_energy.as_ref()).name("Mechanical Energy");
             plot_ui.line(kinetic);
             plot_ui.line(potential);
             plot_ui.line(mechanical);
@@ -200,7 +202,7 @@ impl SynchronousLoop for Gui {
         if self.dock_viewer.kinetic_energy.len() > 8000 {
             self.dock_viewer.kinetic_energy.clear();
             self.dock_viewer.potential_energy.clear();
-            self.dock_viewer.mecanical_energy.clear();
+            self.dock_viewer.mechanical_energy.clear();
         }
 
         for latest in self.graphic_receiver.try_iter() {
@@ -210,7 +212,7 @@ impl SynchronousLoop for Gui {
             let potential_energy = self.dock_viewer.snapshot.potential_energy as f64;
             self.dock_viewer.kinetic_energy.push(PlotPoint::new(time, kinetic_energy));
             self.dock_viewer.potential_energy.push(PlotPoint::new(time, potential_energy));
-            self.dock_viewer.mecanical_energy.push(PlotPoint::new(time, kinetic_energy + potential_energy));
+            self.dock_viewer.mechanical_energy.push(PlotPoint::new(time, kinetic_energy + potential_energy));
         }
 
         egui_dock::DockArea::new(&mut self.tree)
@@ -245,6 +247,7 @@ impl GameLoop for LogicLoop {
                 Event::Double => World::double(time_step),
                 Event::Triple => World::triple(time_step),
                 Event::Rope => World::rope(time_step),
+                Event::HardenedRope => World::hardened_rope(time_step),
                 Event::Rail => World::pendulum_in_rail(time_step),
                 Event::Square => World::square(time_step),
             };
