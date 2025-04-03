@@ -230,7 +230,7 @@ pub struct LogicLoop {
 impl LogicLoop {
     fn new(graphic_sender: Sender<WorldSnapshot>, event_receiver: Receiver<Event>, tick_step: Duration) -> Self {
         Self {
-            simulation: World::rope(tick_step.as_secs_f32()),
+            simulation: World::double(tick_step.as_secs_f32()),
             graphic_sender,
             event_receiver,
         }
@@ -242,18 +242,14 @@ impl GameLoop for LogicLoop {
 
         if let Ok(event) = self.event_receiver.try_recv() {
             let time_step = self.simulation.time_step;
-            self.simulation = match event {
-                Event::Simple => World::simple(time_step),
-                Event::Double => World::double(time_step),
-                Event::Triple => World::triple(time_step),
-                Event::Rope => World::rope(time_step),
-                Event::HardenedRope => World::hardened_rope(time_step),
-                Event::Rail => World::pendulum_in_rail(time_step),
-                Event::Square => World::square(time_step),
+            match event {
+                Event::Simple => self.simulation =  World::simple(time_step),
+                Event::Double => self.simulation =  World::double(time_step),
+                _ => ()
             };
         }
 
-        self.simulation.integrate();
+        //self.simulation.integrate();
         let snapshot = self.simulation.solve();
         self.graphic_sender.send(snapshot).unwrap();
     }

@@ -15,7 +15,7 @@ pub fn new_app() -> impl ApplicationHandler {
     // for tracing purposes, nothing should be created before the EventHandler itself
     EventHandler::new(|| {
         // Setup a bunch of state:
-        let tick_duration = Duration::from_millis(8);
+        let tick_duration = Duration::from_millis(4);
         let logic = LogicHook::new(GameCore::new(tick_duration), tick_duration);
         let graphics = Graphic::new();
         (graphics, logic)
