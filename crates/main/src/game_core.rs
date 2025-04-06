@@ -229,8 +229,10 @@ pub struct LogicLoop {
 
 impl LogicLoop {
     fn new(graphic_sender: Sender<WorldSnapshot>, event_receiver: Receiver<Event>, tick_step: Duration) -> Self {
+        let mut simulation = World::empty(tick_step.as_secs_f32());
+        simulation.double();
         Self {
-            simulation: World::double(tick_step.as_secs_f32()),
+            simulation,
             graphic_sender,
             event_receiver,
         }
@@ -241,10 +243,9 @@ impl GameLoop for LogicLoop {
     fn tick(&mut self, _ctx: &GameContext) {
 
         if let Ok(event) = self.event_receiver.try_recv() {
-            let time_step = self.simulation.time_step;
             match event {
-                Event::Simple => self.simulation =  World::simple(time_step),
-                Event::Double => self.simulation =  World::double(time_step),
+                Event::Simple => self.simulation.simple(),
+                Event::Double => self.simulation.double(),
                 _ => ()
             };
         }

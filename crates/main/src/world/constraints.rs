@@ -25,8 +25,8 @@ pub struct DistanceConstraint {
 
 impl Constraint for DistanceConstraint {
     fn build_j_row(&self, bodies: &[Body], mut row_view: MatrixViewMut<f32, U1, Dyn, U1, Dyn>) {
-        let Body{ pos: pos1, velocity: vel1, .. } = &bodies[self.body_a];
-        let Body{ pos: pos2, velocity: vel2, .. } = &bodies[self.body_b];
+        let Body{ pos: pos1, .. } = &bodies[self.body_a];
+        let Body{ pos: pos2, .. } = &bodies[self.body_b];
 
         let relative = pos2 - pos1;
         let distance = relative.norm();
@@ -49,6 +49,7 @@ impl Constraint for DistanceConstraint {
         let vx = vel2.x - vel1.x;
         let vy = vel2.y - vel1.y;
 
+        //(x * vy - y * vx).powi(2) / ((x * x + y * y) * (x * x + y * y).sqrt())
         (x * vy - y * vx).powi(2) / (x * x + y * y).powf(3.0/2.0)
     }
 
@@ -85,7 +86,7 @@ pub struct AnchorConstraint {
 
 impl Constraint for AnchorConstraint {
     fn build_j_row(&self, bodies: &[Body], mut row_view: MatrixViewMut<f32, U1, Dyn, U1, Dyn>) {
-        let Body{ pos: pos, .. } = &bodies[self.body];
+        let Body{ pos, .. } = &bodies[self.body];
 
         let relative = self.anchor - pos;
         let distance = relative.norm();
@@ -97,30 +98,30 @@ impl Constraint for AnchorConstraint {
     }
 
     fn compute_j_dot_q_dot(&self, bodies: &[Body]) -> f32 {
-        let Body{ pos: pos1, velocity: vel1, .. } = &bodies[self.body];
+        let Body{ pos, velocity: vel, .. } = &bodies[self.body];
 
-        let x = self.anchor.x - pos1.x;
-        let y = self.anchor.y - pos1.y;
-        let vx = -vel1.x;
-        let vy = -vel1.y;
+        let x = self.anchor.x - pos.x;
+        let y = self.anchor.y - pos.y;
+        let vx = -vel.x;
+        let vy = -vel.y;
         (x * vy - y * vx).powi(2) / (x * x + y * y).powf(3.0/2.0)
     }
 
     fn evaluate_c_dot(&self, bodies: &[Body]) -> f32 {
-        let Body{ pos: pos1, velocity: vel1, .. } = &bodies[self.body];
+        let Body{ pos, velocity: vel, .. } = &bodies[self.body];
 
-        let x = self.anchor.x - pos1.x;
-        let y = self.anchor.y - pos1.y;
-        let vx = -vel1.x;
-        let vy = -vel1.y;
+        let x = self.anchor.x - pos.x;
+        let y = self.anchor.y - pos.y;
+        let vx = -vel.x;
+        let vy = -vel.y;
         (x * vx + y * vy) / (x * x + y * y).sqrt()
     }
 
     fn evaluate_c(&self, bodies: &[Body]) -> f32 {
-        let Body{ pos: pos1, .. } = &bodies[self.body];
+        let Body{ pos, .. } = &bodies[self.body];
 
-        let x = self.anchor.x - pos1.x;
-        let y = self.anchor.y - pos1.y;
+        let x = self.anchor.x - pos.x;
+        let y = self.anchor.y - pos.y;
         (x * x + y * y).sqrt() - self.distance
     }
 

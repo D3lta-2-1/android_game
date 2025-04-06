@@ -23,62 +23,64 @@ pub struct World {
 }
 
 impl World {
-
-    pub fn simple(time_step: f32) -> Self {
+    pub fn empty(time_step: f32) -> Self {
         Self {
-            bodies: vec![
-                Body {
-                    pos: Vector2::new(1.0, 0.0),
-                    last_pos: Vector2::new(1.0, 0.0),
-                    velocity: Vector2::new(0.0, 0.0),
-                    inv_mass: 1.0,
-                },
-            ],
-            constraints: vec![
-                Box::new(constraints::AnchorConstraint {
-                    body: 0,
-                    anchor: Vector2::new(0.0, 0.0),
-                    distance: 1.0,
-                }),
-            ],
+            bodies: vec![],
+            constraints: vec![],
             gravity: Vector2::new(0.0, -9.81),
             time_step,
-            age: 0,
+            age: 0
         }
     }
 
-    pub fn double(time_step: f32) -> Self {
-        Self {
-            bodies: vec![
-                Body {
-                    pos: Vector2::new(1.0, 0.0),
-                    last_pos: Vector2::new(1.0, 0.0),
-                    velocity: Vector2::new(0.0, 0.0),
-                    inv_mass: 1.0,
-                },
-                Body {
-                    pos: Vector2::new(1.0, 1.0),
-                    last_pos: Vector2::new(1.0, 1.0),
-                    velocity: Vector2::new(-10.0, 0.0),
-                    inv_mass: 1.0,
-                },
-            ],
-            constraints: vec![
-                Box::new(constraints::AnchorConstraint {
-                    body: 0,
-                    anchor: Vector2::new(0.0, 0.0),
-                    distance: 1.0,
-                }),
-                Box::new(constraints::DistanceConstraint {
-                    body_a: 0,
-                    body_b: 1,
-                    distance: 1.0,
-                }),
-            ],
-            gravity: Vector2::new(0.0, -9.81),
-            time_step,
-            age: 0,
-        }
+    pub fn clear(&mut self) {
+        self.bodies.clear();
+        self.constraints.clear();
+        self.age = 0;
+    }
+
+    pub fn add_body(&mut self, pos: Vector2<f32>, velocity: Vector2<f32>, inv_mass: f32) {
+        let body = Body {
+            pos,
+            last_pos: pos - velocity * self.time_step,
+            velocity,
+            inv_mass,
+        };
+        self.bodies.push(body);
+    }
+
+    pub fn simple(&mut self) {
+        self.clear();
+        self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 0.0), 1.0);
+        self.constraints = vec![
+            Box::new(constraints::AnchorConstraint {
+                body: 0,
+                anchor: Vector2::new(0.0, 0.0),
+                distance: 1.0,
+            }),
+        ];
+        self.gravity = Vector2::new(0.0, -9.81);
+    }
+
+    pub fn double(&mut self) {
+        self.clear();
+        self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 0.0), 1.0);
+        self.add_body(Vector2::new(1.0, 1.0), Vector2::new(-0.0, 0.0), 1.0);
+        self.constraints = vec![
+            /*Box::new(constraints::DistanceConstraint {
+                body_a: 0,
+                body_b: 1,
+                distance: 1.0,
+            }),*/
+            Box::new(constraints::AnchorConstraint {
+                body: 0,
+                anchor: Vector2::new(0.0, 0.0),
+                distance: 1.0,
+            }),
+
+
+        ];
+        self.gravity = Vector2::new(0.0, -9.81);
     }
 
     // there is no broad-phase nor narrow-phase collision detection
@@ -143,7 +145,7 @@ impl World {
 
         let k = &j * &inv_mass_matrix * &jt;
         let lu= k.lu();
-        let b = - j_w_q2dot - j_dot_q_dot - (1.0/self.time_step) * c_dot - (1.0/(self.time_step * self.time_step)) * c;//+ (1.0 / self.time_step) * b;
+        let b = - j_w_q2dot - j_dot_q_dot - (0.0/self.time_step) * c_dot - (0.0/(self.time_step * self.time_step)) * c;
         let lambda = lu.solve(&b).unwrap();
         let applied_acceleration = (jt * &lambda) + force;
 
@@ -151,12 +153,12 @@ impl World {
         for (i, body) in self.bodies.iter_mut().enumerate() {
 
             let acceleration = Vector2::new(applied_acceleration[i * 2], applied_acceleration[i * 2 + 1]) * body.inv_mass;
-            let vel_from_acc = body.velocity + acceleration * self.time_step;
             let temp = body.pos;
+            let old_pos = body.last_pos;
             //Verlet integration
-            body.pos = body.pos + (body.pos - body.last_pos) + acceleration * self.time_step * self.time_step;
+            body.pos = body.pos + body.pos - body.last_pos + acceleration * self.time_step * self.time_step;
             body.last_pos = temp;
-            body.velocity = (((body.pos - body.last_pos) / self.time_step) + vel_from_acc) / 2.0;
+            body.velocity = (body.pos - old_pos) / (2.0 * self.time_step);
         }
 
         /*for (i, body) in self.bodies.iter_mut().enumerate() {
