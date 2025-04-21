@@ -7,6 +7,7 @@ edition = "2024"
 running_context.workspace = true
 winit.workspace = true
 nalgebra = "0.33.2"
+hecs = "0.10.5"
 egui_dock = "0.16"
 egui_plot = "0.31"
 egui = { workspace = true, features = ["color-hex"] }

@@ -1,13 +1,13 @@
-use std::sync::mpsc::{Receiver, Sender};
-use std::time::Duration;
-use egui::{vec2, Color32, Frame, Pos2, Ui, WidgetText, Shape, Stroke};
+use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
+use crate::world::constraints::ConstraintWidget;
+use crate::world::{GameContent, Solver, WorldSnapshot};
+use egui::{Color32, Frame, Pos2, Shape, Stroke, Ui, WidgetText, vec2};
 use egui_dock::TabViewer;
 use egui_plot::{Legend, Line, Plot, PlotPoint};
 use nalgebra::Vector2;
 use running_context::event_handling::EguiGuiExtendContext;
-use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
-use crate::world::{World, WorldSnapshot};
-use crate::world::constraints::ConstraintWidget;
+use std::sync::mpsc::{Receiver, Sender};
+use std::time::Duration;
 
 pub struct GameCore;
 
@@ -15,7 +15,10 @@ impl GameCore {
     pub fn new(time_step: Duration) -> (Gui, LogicLoop) {
         let (graphic_sender, graphic_receiver) = std::sync::mpsc::channel();
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
-        (Gui::new(graphic_receiver, event_sender), LogicLoop::new(graphic_sender, event_receiver, time_step))
+        (
+            Gui::new(graphic_receiver, event_sender),
+            LogicLoop::new(graphic_sender, event_receiver, time_step),
+        )
     }
 }
 
@@ -26,26 +29,31 @@ enum Tab {
     Plots,
 }
 
+struct Event {
+    simulation: SimulationContent,
+    solver: Solver,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Event {
+enum SimulationContent {
     Simple,
     Double,
     Triple,
     Rope,
     HardenedRope,
     Rail,
-    Square
+    Square,
 }
 
-impl Event {
-    const LIST: [Event; 7] = [
-        Event::Simple,
-        Event::Double,
-        Event::Triple,
-        Event::Rope,
-        Event::HardenedRope,
-        Event::Rail,
-        Event::Square
+impl SimulationContent {
+    const LIST: [SimulationContent; 7] = [
+        SimulationContent::Simple,
+        SimulationContent::Double,
+        SimulationContent::Triple,
+        SimulationContent::Rope,
+        SimulationContent::HardenedRope,
+        SimulationContent::Rail,
+        SimulationContent::Square,
     ];
 }
 
@@ -65,6 +73,9 @@ impl Gui {
                 kinetic_energy: vec![],
                 potential_energy: vec![],
                 mechanical_energy: vec![],
+                selected_simulation: SimulationContent::Simple,
+                selected_solver: Solver::FirstOrderWithPrepass,
+                should_clear_graph: false,
             },
             tree: egui_dock::DockState::new(vec![Tab::World, Tab::Button, Tab::Plots]),
         }
@@ -77,6 +88,9 @@ struct DockViewer {
     kinetic_energy: Vec<PlotPoint>,
     potential_energy: Vec<PlotPoint>,
     mechanical_energy: Vec<PlotPoint>,
+    selected_simulation: SimulationContent,
+    selected_solver: Solver,
+    should_clear_graph: bool,
 }
 
 impl TabViewer for DockViewer {
@@ -93,7 +107,7 @@ impl TabViewer for DockViewer {
     fn ui(&mut self, ui: &mut Ui, tab: &mut Tab) {
         match tab {
             Tab::Button => self.display_button(ui),
-            Tab::World =>  self.draw_simulation(ui),
+            Tab::World => self.draw_simulation(ui),
             Tab::Plots => self.draw_plot(ui),
         }
     }
@@ -101,13 +115,46 @@ impl TabViewer for DockViewer {
 
 impl DockViewer {
     fn display_button(&mut self, ui: &mut Ui) {
-        for event in Event::LIST.into_iter() {
-            if ui.button(format!("{:?}", event)).clicked() {
-                self.sender.send(event).unwrap();
-                self.kinetic_energy.clear();
-                self.potential_energy.clear();
-                self.mechanical_energy.clear();
-            }
+        let mut send_event = false;
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label("Simulation");
+                for simulation_content in SimulationContent::LIST.into_iter() {
+                    if ui
+                        .selectable_value(
+                            &mut self.selected_simulation,
+                            simulation_content,
+                            format!("{:?}", simulation_content),
+                        )
+                        .clicked()
+                    {
+                        send_event = true;
+                    }
+                }
+            });
+            ui.vertical(|ui| {
+                ui.label("Solver");
+                for solver in Solver::LIST.into_iter() {
+                    if ui
+                        .selectable_value(
+                            &mut self.selected_solver,
+                            solver,
+                            format!("{:?}", solver),
+                        )
+                        .clicked()
+                    {
+                        send_event = true;
+                    }
+                }
+            });
+        });
+        if send_event {
+            self.sender
+                .send(Event {
+                    simulation: self.selected_simulation,
+                    solver: self.selected_solver,
+                })
+                .unwrap();
         }
     }
 
@@ -116,9 +163,9 @@ impl DockViewer {
             let desired_size = vec2(ui.available_width(), ui.available_height());
             let (_id, rect) = ui.allocate_space(desired_size);
 
-            let center= rect.center();
+            let center = rect.center();
 
-            let to_screen_coordinates = |p : Vector2<f32>| {
+            let to_screen_coordinates = |p: Vector2<f32>| {
                 let mut p = Pos2::new(p.x * 70.0, p.y * -70.0);
                 p += center.to_vec2();
                 p
@@ -127,7 +174,6 @@ impl DockViewer {
             let mut shapes = vec![];
 
             for (widgets, force) in self.snapshot.links.iter() {
-
                 let lerp_color = if *force >= 0.0 {
                     Color32::WHITE.lerp_to_gamma(Color32::LIGHT_BLUE, *force)
                 } else {
@@ -140,49 +186,44 @@ impl DockViewer {
                         let pos_b = self.snapshot.pos[*b];
                         shapes.push(Shape::line_segment(
                             [to_screen_coordinates(pos_a), to_screen_coordinates(pos_b)],
-                            Stroke::new(3.0, lerp_color)
+                            Stroke::new(3.0, lerp_color),
                         ));
-                    },
+                    }
                     ConstraintWidget::Anchor(a, anchor) => {
                         let pos = to_screen_coordinates(self.snapshot.pos[*a]);
                         let anchor = to_screen_coordinates(*anchor);
 
                         shapes.push(Shape::line_segment(
                             [pos, anchor],
-                            Stroke::new(3.0, lerp_color)
+                            Stroke::new(3.0, lerp_color),
                         ));
-                        shapes.push(Shape::circle_filled(
-                            anchor,
-                            5.0,
-                            Color32::BLUE
-                        ))
-                    },
+                        shapes.push(Shape::circle_filled(anchor, 5.0, Color32::BLUE))
+                    }
                     ConstraintWidget::Horizontal(y) => {
                         let y = y * -70.0 + center.y;
                         shapes.push(Shape::line_segment(
                             [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
-                            Stroke::new(3.0, Color32::DARK_GRAY)
+                            Stroke::new(3.0, Color32::DARK_GRAY),
                         ));
-                    },
+                    }
                     _ => (),
                 }
             }
-            shapes.extend(self.snapshot.pos.iter().map(|body|
-                Shape::circle_filled(
-                    to_screen_coordinates(*body),
-                    7.0,
-                    Color32::RED
-                )
-            ));
+            shapes.extend(
+                self.snapshot.pos.iter().map(|body| {
+                    Shape::circle_filled(to_screen_coordinates(*body), 7.0, Color32::RED)
+                }),
+            );
             ui.painter().extend(shapes);
         });
     }
 
-    fn draw_plot(&self, ui: &mut Ui) {
-        let mut plot = Plot::new("my_plot").legend(Legend::default());
+    fn draw_plot(&mut self, ui: &mut Ui) {
+        let mut plot = Plot::new("energy over time").legend(Legend::default());
 
-        if self.kinetic_energy.len() <= 50 { // TODO: this is an ugly why to reset the plot, it would be better to keep track of when a button is pressed
+        if self.should_clear_graph {
             plot = plot.reset();
+            self.should_clear_graph = false;
         }
 
         plot.show(ui, |plot_ui| {
@@ -198,7 +239,6 @@ impl DockViewer {
 
 impl SynchronousLoop for Gui {
     fn update_gui(&mut self, ctx: &mut EguiGuiExtendContext) {
-
         if self.dock_viewer.kinetic_energy.len() > 8000 {
             self.dock_viewer.kinetic_energy.clear();
             self.dock_viewer.potential_energy.clear();
@@ -210,9 +250,21 @@ impl SynchronousLoop for Gui {
             let time = self.dock_viewer.snapshot.date as f64;
             let kinetic_energy = self.dock_viewer.snapshot.kinetic_energy as f64;
             let potential_energy = self.dock_viewer.snapshot.potential_energy as f64;
-            self.dock_viewer.kinetic_energy.push(PlotPoint::new(time, kinetic_energy));
-            self.dock_viewer.potential_energy.push(PlotPoint::new(time, potential_energy));
-            self.dock_viewer.mechanical_energy.push(PlotPoint::new(time, kinetic_energy + potential_energy));
+            if time < self.dock_viewer.kinetic_energy.last().map_or(0.0, |p| p.x) {
+                self.dock_viewer.kinetic_energy.clear();
+                self.dock_viewer.potential_energy.clear();
+                self.dock_viewer.mechanical_energy.clear();
+                self.dock_viewer.should_clear_graph = true;
+            }
+            self.dock_viewer
+                .kinetic_energy
+                .push(PlotPoint::new(time, kinetic_energy));
+            self.dock_viewer
+                .potential_energy
+                .push(PlotPoint::new(time, potential_energy));
+            self.dock_viewer
+                .mechanical_energy
+                .push(PlotPoint::new(time, kinetic_energy + potential_energy));
         }
 
         egui_dock::DockArea::new(&mut self.tree)
@@ -222,14 +274,18 @@ impl SynchronousLoop for Gui {
 }
 
 pub struct LogicLoop {
-    simulation: World,
+    simulation: GameContent,
     graphic_sender: Sender<WorldSnapshot>,
     event_receiver: Receiver<Event>,
 }
 
 impl LogicLoop {
-    fn new(graphic_sender: Sender<WorldSnapshot>, event_receiver: Receiver<Event>, tick_step: Duration) -> Self {
-        let mut simulation = World::empty(tick_step.as_secs_f32());
+    fn new(
+        graphic_sender: Sender<WorldSnapshot>,
+        event_receiver: Receiver<Event>,
+        tick_step: Duration,
+    ) -> Self {
+        let mut simulation = GameContent::empty(tick_step.as_secs_f32());
         simulation.double();
         Self {
             simulation,
@@ -241,12 +297,14 @@ impl LogicLoop {
 
 impl GameLoop for LogicLoop {
     fn tick(&mut self, _ctx: &GameContext) {
-
-        if let Ok(event) = self.event_receiver.try_recv() {
-            match event {
-                Event::Simple => self.simulation.simple(),
-                Event::Double => self.simulation.double(),
-                _ => ()
+        if let Ok(Event { simulation, solver }) = self.event_receiver.try_recv() {
+            self.simulation.solver = solver;
+            match simulation {
+                SimulationContent::Simple => self.simulation.simple(),
+                SimulationContent::Double => self.simulation.double(),
+                SimulationContent::Triple => self.simulation.triple(),
+                SimulationContent::Rope => self.simulation.rope(),
+                _ => (),
             };
         }
 
