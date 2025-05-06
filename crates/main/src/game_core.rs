@@ -27,6 +27,7 @@ enum Tab {
     Button,
     World,
     Plots,
+    Stats,
 }
 
 struct Event {
@@ -73,11 +74,11 @@ impl Gui {
                 kinetic_energy: vec![],
                 potential_energy: vec![],
                 mechanical_energy: vec![],
-                selected_simulation: SimulationContent::Simple,
-                selected_solver: Solver::FirstOrderWithPrepass,
+                selected_simulation: SimulationContent::Double,
+                selected_solver: Solver::HybridV3,
                 should_clear_graph: false,
             },
-            tree: egui_dock::DockState::new(vec![Tab::World, Tab::Button, Tab::Plots]),
+            tree: egui_dock::DockState::new(vec![Tab::World, Tab::Button, Tab::Plots, Tab::Stats]),
         }
     }
 }
@@ -101,6 +102,7 @@ impl TabViewer for DockViewer {
             Tab::Button => "Main".into(),
             Tab::World => "Pendulum".into(),
             Tab::Plots => "Plots".into(),
+            Tab::Stats => "Stats".into(),
         }
     }
 
@@ -109,6 +111,7 @@ impl TabViewer for DockViewer {
             Tab::Button => self.display_button(ui),
             Tab::World => self.draw_simulation(ui),
             Tab::Plots => self.draw_plot(ui),
+            Tab::Stats => self.display_stats(ui),
         }
     }
 }
@@ -199,12 +202,38 @@ impl DockViewer {
                         ));
                         shapes.push(Shape::circle_filled(anchor, 5.0, Color32::BLUE))
                     }
-                    ConstraintWidget::Horizontal(y) => {
-                        let y = y * -70.0 + center.y;
-                        shapes.push(Shape::line_segment(
-                            [Pos2::new(rect.left(), y), Pos2::new(rect.right(), y)],
-                            Stroke::new(3.0, Color32::DARK_GRAY),
-                        ));
+                    ConstraintWidget::Plane(normal, d) => {
+                        let (u, v) = rect.center().into();
+                        let d = d + normal.dot(&Vector2::new(u, -v));
+                        let a = normal.x;
+                        let b = -normal.y;
+                        let x1 = rect.left();
+                        let x2 = rect.right();
+                        let y1 = rect.top();
+                        let y2 = rect.bottom();
+
+                        //ax + by = d
+                        // => y = (d - ax) / b
+                        // => x = (d - by) / a
+                        let points = [
+                            Pos2::new(x1,(d - a * x1) / b),
+                            Pos2::new(x2, (d - a * x2) / b),
+                            Pos2::new((d - b * y1) / a, y1),
+                            Pos2::new((d - b * y2) / a, y2),
+                        ];
+
+                        let mut iter = points.into_iter().filter(|x| rect.contains(*x));
+
+                        let mut array = || {
+                            Some([iter.next()?, iter.next()?])
+                        };
+
+                        if let Some([a, b]) = array() {
+                            shapes.push(Shape::line_segment(
+                                [a, b],
+                                Stroke::new(3.0, Color32::DARK_GRAY),
+                            ));
+                        }
                     }
                     _ => (),
                 }
@@ -234,6 +263,10 @@ impl DockViewer {
             plot_ui.line(potential);
             plot_ui.line(mechanical);
         });
+    }
+
+    fn display_stats(&self, ui: &mut Ui) {
+        ui.label(format!("Violation mean: {}", -self.snapshot.violation_mean.log10()));
     }
 }
 
@@ -304,12 +337,13 @@ impl GameLoop for LogicLoop {
                 SimulationContent::Double => self.simulation.double(),
                 SimulationContent::Triple => self.simulation.triple(),
                 SimulationContent::Rope => self.simulation.rope(),
+                SimulationContent::Rail => self.simulation.rail(),
                 _ => (),
             };
         }
 
-        //self.simulation.integrate();
-        let snapshot = self.simulation.solve();
+        self.simulation.solve();
+        let snapshot = self.simulation.take_snapshot();
         self.graphic_sender.send(snapshot).unwrap();
     }
 }
