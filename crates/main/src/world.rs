@@ -73,18 +73,16 @@ pub enum Solver {
     HybridV2,
     HybridV3,
     HybridV4,
-    HybridV5
 }
 
 impl Solver {
-    pub const LIST: [Solver; 7] = [
+    pub const LIST: [Solver; 6] = [
         Solver::FirstOrder,
         Solver::SecondOrder,
         Solver::FirstOrderWithPrepass,
         Solver::HybridV2,
         Solver::HybridV3,
         Solver::HybridV4,
-        Solver::HybridV5,
     ];
 }
 pub struct GameContent {
@@ -378,7 +376,6 @@ impl GameContent {
             Solver::HybridV2 => self.hybrid_v2(),
             Solver::HybridV3 => self.hybrid_v3(),
             Solver::HybridV4 => self.hybrid_v4(),
-            Solver::HybridV5 => self.hybrid_v5(),
         }
     }
 
@@ -433,12 +430,9 @@ impl GameContent {
         //integrate velocity and position
         for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
             let acceleration = Vector2::new(applied_force[i * 2], applied_force[i * 2 + 1]) * mass.inv_mass;
-            let temp = pos.actual;
-            let old_pos = pos.last_tick;
-            //Verlet integration
-            pos.actual = pos.actual + pos.actual - pos.last_tick + acceleration * self.time_step * self.time_step;
-            pos.last_tick = temp;
-            velocity.0 = (pos.actual - old_pos) / (2.0 * self.time_step);
+            velocity.0 += acceleration * self.time_step;
+            pos.actual += velocity.0 * self.time_step + 0.5 * self.time_step * self.time_step * acceleration;
+            // verlet integration is in appropriate here since approximation on the velocity vector is too dirty
         }
     }
 
@@ -497,6 +491,10 @@ impl GameContent {
     /// first we make the velocity valid is this position, without applying any force
     /// then we apply forces at this location and update the velocity
     /// and we integrate the position
+    ///
+    /// Taking a step back, wasn't bad, but was poorly set up
+    /// In order to get the best accuracy, the new position need to validate constraints
+    /// that mean the velocity need to be in the right "direction"
     fn hybrid_v2(&mut self) {
         // both solvers work in a similar way, and can share a lot of calculations
         // the most expensive is by far the inversion of the K matrix, which is luckily common to both
@@ -542,6 +540,16 @@ impl GameContent {
         }
     }
 
+    /// I guessed most of this solver by playing around
+    /// this is, by far, the most accurate solver, while being one of the fastest
+    /// My original idea was to apply the second part of the second order to add a little extra information of acceleration
+    /// turn out, I wasn't far from being successful, but I was missing a few things, where do this 1/2 applied on J_dot_q_dot comes from ?
+    /// With more investigation, I found that a second order taylor expansion on "the position" gave this
+    /// x(t + Dt) = x(t) + v(t) * Dt + 1/2 * a(t) * Dt^2
+    /// (x(t + Dt) - x(t)) / Dt = v(t) + 1/2 * a(t) * Dt
+    /// Some piece are still missing, but it looks like this solver is doing big part of the integration while working on the velocity
+    /// which could explain it being so accurate
+    /// My theory on the remaining energy loss, while being very low, is that the new velocity isn't really tangent to the movement
     fn hybrid_v3(&mut self) {
         let inv_mass_matrix = self.inv_mass_matrix();
         let j = self.j_matrix();
@@ -601,45 +609,6 @@ impl GameContent {
             pos.add_assign(velocity.0 * self.time_step);
         }
 
-        let _c = self.c_vector();
-    }
-
-    fn hybrid_v5(&mut self) {
-        let inv_mass_matrix = self.inv_mass_matrix();
-        let j = self.j_matrix();
-        let jt = j.transpose();
-        let k = &j * &inv_mass_matrix * &jt;
-        let cholesky = k.cholesky().unwrap();
-        let inv_k = cholesky.inverse();
-
-        for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
-            // euler integration
-            velocity.add_assign(self.gravity * self.time_step);
-        }
-
-        // correct the velocity at the second order
-        let q_dot = self.q_dot_vector();
-
-        let b = -&j * q_dot;
-        let lambda = &inv_k * b;
-        let applied_momentum = &jt * &lambda;
-
-        // correct the velocity at the first order
-        for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
-            let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
-            velocity.0 += momentum * mass.inv_mass;
-        }
-
-        // correct the velocity at the first order
-        let j_dot_q_dot = self.j_dot_q_dot();
-        let b = -j_dot_q_dot * self.time_step * 0.5;
-        let lambda = &inv_k  * b;
-        let applied_momentum = &jt * &lambda;
-        for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
-            let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
-            velocity.0 += momentum * mass.inv_mass;
-            pos.add_assign(velocity.0 * self.time_step);
-        }
         let _c = self.c_vector();
     }
 }

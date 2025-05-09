@@ -41,20 +41,16 @@ enum SimulationContent {
     Double,
     Triple,
     Rope,
-    HardenedRope,
     Rail,
-    Square,
 }
 
 impl SimulationContent {
-    const LIST: [SimulationContent; 7] = [
+    const LIST: [SimulationContent; 5] = [
         SimulationContent::Simple,
         SimulationContent::Double,
         SimulationContent::Triple,
         SimulationContent::Rope,
-        SimulationContent::HardenedRope,
         SimulationContent::Rail,
-        SimulationContent::Square,
     ];
 }
 
@@ -338,7 +334,6 @@ impl GameLoop for LogicLoop {
                 SimulationContent::Triple => self.simulation.triple(),
                 SimulationContent::Rope => self.simulation.rope(),
                 SimulationContent::Rail => self.simulation.rail(),
-                _ => (),
             };
         }
 
