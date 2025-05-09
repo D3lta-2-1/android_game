@@ -59,7 +59,7 @@ pub struct RenderContext {
 impl RenderContext {
     pub fn new() -> Self {
         Self {
-            instance: wgpu::Instance::new(wgpu::InstanceDescriptor::default()),
+            instance: wgpu::Instance::new(&wgpu::InstanceDescriptor::default()),
             device: None,
         }
     }

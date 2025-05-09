@@ -1,200 +1,344 @@
-use std::sync::mpsc::{Receiver, Sender};
-use std::time::Duration;
-use egui::{hex_color, emath, lerp, pos2, remap, vec2, Color32, Frame, Pos2, Rect, Ui, WidgetText};
+use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
+use crate::world::constraints::ConstraintWidget;
+use crate::world::{GameContent, Solver, WorldSnapshot};
+use egui::{Color32, Frame, Pos2, Shape, Stroke, Ui, WidgetText, vec2};
 use egui_dock::TabViewer;
-use epaint::{PathStroke, Stroke};
+use egui_plot::{Legend, Line, Plot, PlotPoint};
 use nalgebra::Vector2;
 use running_context::event_handling::EguiGuiExtendContext;
-use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
-use crate::pendulum::PendulumSystem;
+use std::sync::mpsc::{Receiver, Sender};
+use std::time::Duration;
 
 pub struct GameCore;
 
 impl GameCore {
     pub fn new(time_step: Duration) -> (Gui, LogicLoop) {
-        let (sender, receiver) = std::sync::mpsc::channel();
-        (Gui::new(receiver), LogicLoop::new(sender, time_step))
+        let (graphic_sender, graphic_receiver) = std::sync::mpsc::channel();
+        let (event_sender, event_receiver) = std::sync::mpsc::channel();
+        (
+            Gui::new(graphic_receiver, event_sender),
+            LogicLoop::new(graphic_sender, event_receiver, time_step),
+        )
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Tab {
-    Main,
-    Waves,
-    Pendulum,
+    Button,
+    World,
+    Plots,
+    Stats,
+}
+
+struct Event {
+    simulation: SimulationContent,
+    solver: Solver,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SimulationContent {
+    Simple,
+    Double,
+    Triple,
+    Rope,
+    Rail,
+}
+
+impl SimulationContent {
+    const LIST: [SimulationContent; 5] = [
+        SimulationContent::Simple,
+        SimulationContent::Double,
+        SimulationContent::Triple,
+        SimulationContent::Rope,
+        SimulationContent::Rail,
+    ];
 }
 
 pub struct Gui {
-    receiver: Receiver<Vector2<f32>>,
-    last_pos: Vector2<f32>,
+    graphic_receiver: Receiver<WorldSnapshot>,
+    dock_viewer: DockViewer,
     tree: egui_dock::DockState<Tab>,
 }
 
 impl Gui {
-    pub fn new(receiver: Receiver<Vector2<f32>>) -> Self {
+    fn new(receiver: Receiver<WorldSnapshot>, event_sender: Sender<Event>) -> Self {
         Self {
-            receiver,
-            last_pos: Vector2::new(0.0, 0.0),
-            tree: egui_dock::DockState::new(vec![Tab::Pendulum, Tab::Main, Tab::Waves]),
+            graphic_receiver: receiver,
+            dock_viewer: DockViewer {
+                snapshot: WorldSnapshot::default(),
+                sender: event_sender,
+                kinetic_energy: vec![],
+                potential_energy: vec![],
+                mechanical_energy: vec![],
+                selected_simulation: SimulationContent::Double,
+                selected_solver: Solver::HybridV3,
+                should_clear_graph: false,
+            },
+            tree: egui_dock::DockState::new(vec![Tab::World, Tab::Button, Tab::Plots, Tab::Stats]),
         }
     }
 }
 
-fn draw_waves(ui: &mut Ui) {
-    Frame::canvas(ui.style()).show(ui, |ui| {
-        ui.ctx().request_repaint();
-        let time = ui.input(|i| i.time);
-
-        let desired_size = vec2(ui.available_width(), ui.available_height()); //* vec2(1.0, 0.35);
-        let (_id, rect) = ui.allocate_space(desired_size);
-
-        let to_screen =
-            emath::RectTransform::from_to(Rect::from_x_y_ranges(0.0..=1.0, -1.0..=1.0), rect);
-
-        let mut shapes = vec![];
-
-        for &mode in &[2, 3, 5] {
-            let mode = mode as f64;
-            let n = 120;
-            let speed = 1.5;
-
-            let points: Vec<Pos2> = (0..=n)
-                .map(|i| {
-                    let t = i as f64 / (n as f64);
-                    let amp = (time * speed * mode).sin() / mode;
-                    let y = amp * (t * std::f64::consts::TAU / 2.0 * mode).sin();
-                    to_screen * pos2(t as f32, y as f32)
-                })
-                .collect();
-
-            let thickness = 10.0 / mode as f32;
-            shapes.push(epaint::Shape::line(
-                points,
-                PathStroke::new_uv(thickness, move |rect, p| {
-                    let t = remap(p.x, rect.x_range(), -1.0..=1.0).abs();
-                    let center_color = hex_color!("#5BCEFA");
-                    let outer_color = hex_color!("#F5A9B8");
-
-                    Color32::from_rgb(
-                        lerp(center_color.r() as f32..=outer_color.r() as f32, t) as u8,
-                        lerp(center_color.g() as f32..=outer_color.g() as f32, t) as u8,
-                        lerp(center_color.b() as f32..=outer_color.b() as f32, t) as u8,
-                    )
-                })
-
-            ));
-        }
-        ui.painter().extend(shapes);
-    });
+struct DockViewer {
+    snapshot: WorldSnapshot,
+    sender: Sender<Event>,
+    kinetic_energy: Vec<PlotPoint>,
+    potential_energy: Vec<PlotPoint>,
+    mechanical_energy: Vec<PlotPoint>,
+    selected_simulation: SimulationContent,
+    selected_solver: Solver,
+    should_clear_graph: bool,
 }
 
-fn draw_pendule(ui: &mut Ui, position: Vector2<f32>) {
-    Frame::canvas(ui.style()).show(ui, |ui| {
-        let desired_size = vec2(ui.available_width(), ui.available_height());
-        let (_id, rect) = ui.allocate_space(desired_size);
-
-        let center= rect.center();
-
-
-        let mut shapes = vec![];
-
-        let mut points: Vec<Pos2> = vec![
-            pos2(0.0, 0.0),
-            pos2(position.x, position.y),
-        ];
-
-        points.iter_mut().for_each(|p| {
-            p.x *= 70.0;
-            p.y *= -70.0; // because y is inverted on screen
-            *p += center.to_vec2()
-        });
-
-        shapes.push(epaint::Shape::Circle(epaint::CircleShape{
-            center: points[0],
-            radius: 70.0,
-            fill: Color32::from_rgba_premultiplied(0, 0, 0, 0),
-            stroke: Stroke::new(3.0, Color32::DARK_GRAY)
-        }));
-
-
-        shapes.push(epaint::Shape::line(
-            points.clone(),
-            PathStroke::new(3.0, Color32::WHITE)
-        ));
-        shapes.push(epaint::Shape::circle_filled(points[0], 5.0, Color32::BLUE));
-        shapes.push(epaint::Shape::circle_filled(points[1], 10.0, Color32::RED));
-
-
-
-        ui.painter().extend(shapes);
-    });
-}
-
-struct Viewer {
-    pos: Vector2<f32>,
-}
-
-impl TabViewer for Viewer {
+impl TabViewer for DockViewer {
     type Tab = Tab;
 
     fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
         match tab {
-            Tab::Main => "Main".into(),
-            Tab::Waves => "Drawn".into(),
-            Tab::Pendulum => "Pendulum".into(),
+            Tab::Button => "Main".into(),
+            Tab::World => "Pendulum".into(),
+            Tab::Plots => "Plots".into(),
+            Tab::Stats => "Stats".into(),
         }
     }
 
     fn ui(&mut self, ui: &mut Ui, tab: &mut Tab) {
         match tab {
-            Tab::Main => {
-                ui.text_edit_singleline(&mut "other test".to_owned());
-                    if ui.button("nothing button").clicked() {
+            Tab::Button => self.display_button(ui),
+            Tab::World => self.draw_simulation(ui),
+            Tab::Plots => self.draw_plot(ui),
+            Tab::Stats => self.display_stats(ui),
+        }
+    }
+}
+
+impl DockViewer {
+    fn display_button(&mut self, ui: &mut Ui) {
+        let mut send_event = false;
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label("Simulation");
+                for simulation_content in SimulationContent::LIST.into_iter() {
+                    if ui
+                        .selectable_value(
+                            &mut self.selected_simulation,
+                            simulation_content,
+                            format!("{:?}", simulation_content),
+                        )
+                        .clicked()
+                    {
+                        send_event = true;
+                    }
+                }
+            });
+            ui.vertical(|ui| {
+                ui.label("Solver");
+                for solver in Solver::LIST.into_iter() {
+                    if ui
+                        .selectable_value(
+                            &mut self.selected_solver,
+                            solver,
+                            format!("{:?}", solver),
+                        )
+                        .clicked()
+                    {
+                        send_event = true;
+                    }
+                }
+            });
+        });
+        if send_event {
+            self.sender
+                .send(Event {
+                    simulation: self.selected_simulation,
+                    solver: self.selected_solver,
+                })
+                .unwrap();
+        }
+    }
+
+    fn draw_simulation(&self, ui: &mut Ui) {
+        Frame::canvas(ui.style()).show(ui, |ui| {
+            let desired_size = vec2(ui.available_width(), ui.available_height());
+            let (_id, rect) = ui.allocate_space(desired_size);
+
+            let center = rect.center();
+
+            let to_screen_coordinates = |p: Vector2<f32>| {
+                let mut p = Pos2::new(p.x * 70.0, p.y * -70.0);
+                p += center.to_vec2();
+                p
+            };
+
+            let mut shapes = vec![];
+
+            for (widgets, force) in self.snapshot.links.iter() {
+                let lerp_color = if *force >= 0.0 {
+                    Color32::WHITE.lerp_to_gamma(Color32::LIGHT_BLUE, *force)
+                } else {
+                    Color32::WHITE.lerp_to_gamma(Color32::LIGHT_RED, -*force)
+                };
+
+                match widgets {
+                    ConstraintWidget::Link(a, b) => {
+                        let pos_a = self.snapshot.pos[*a];
+                        let pos_b = self.snapshot.pos[*b];
+                        shapes.push(Shape::line_segment(
+                            [to_screen_coordinates(pos_a), to_screen_coordinates(pos_b)],
+                            Stroke::new(3.0, lerp_color),
+                        ));
+                    }
+                    ConstraintWidget::Anchor(a, anchor) => {
+                        let pos = to_screen_coordinates(self.snapshot.pos[*a]);
+                        let anchor = to_screen_coordinates(*anchor);
+
+                        shapes.push(Shape::line_segment(
+                            [pos, anchor],
+                            Stroke::new(3.0, lerp_color),
+                        ));
+                        shapes.push(Shape::circle_filled(anchor, 5.0, Color32::BLUE))
+                    }
+                    ConstraintWidget::Plane(normal, d) => {
+                        let (u, v) = rect.center().into();
+                        let d = d + normal.dot(&Vector2::new(u, -v));
+                        let a = normal.x;
+                        let b = -normal.y;
+                        let x1 = rect.left();
+                        let x2 = rect.right();
+                        let y1 = rect.top();
+                        let y2 = rect.bottom();
+
+                        //ax + by = d
+                        // => y = (d - ax) / b
+                        // => x = (d - by) / a
+                        let points = [
+                            Pos2::new(x1,(d - a * x1) / b),
+                            Pos2::new(x2, (d - a * x2) / b),
+                            Pos2::new((d - b * y1) / a, y1),
+                            Pos2::new((d - b * y2) / a, y2),
+                        ];
+
+                        let mut iter = points.into_iter().filter(|x| rect.contains(*x));
+
+                        let mut array = || {
+                            Some([iter.next()?, iter.next()?])
+                        };
+
+                        if let Some([a, b]) = array() {
+                            shapes.push(Shape::line_segment(
+                                [a, b],
+                                Stroke::new(3.0, Color32::DARK_GRAY),
+                            ));
+                        }
+                    }
+                    _ => (),
                 }
             }
-            Tab::Waves => {
-                draw_waves(ui);
-            }
-            Tab::Pendulum => {
-                draw_pendule(ui, self.pos);
-            }
+            shapes.extend(
+                self.snapshot.pos.iter().map(|body| {
+                    Shape::circle_filled(to_screen_coordinates(*body), 7.0, Color32::RED)
+                }),
+            );
+            ui.painter().extend(shapes);
+        });
+    }
+
+    fn draw_plot(&mut self, ui: &mut Ui) {
+        let mut plot = Plot::new("energy over time").legend(Legend::default());
+
+        if self.should_clear_graph {
+            plot = plot.reset();
+            self.should_clear_graph = false;
         }
+
+        plot.show(ui, |plot_ui| {
+            let kinetic = Line::new(self.kinetic_energy.as_ref()).name("Kinetic Energy");
+            let potential = Line::new(self.potential_energy.as_ref()).name("Potential Energy");
+            let mechanical = Line::new(self.mechanical_energy.as_ref()).name("Mechanical Energy");
+            plot_ui.line(kinetic);
+            plot_ui.line(potential);
+            plot_ui.line(mechanical);
+        });
+    }
+
+    fn display_stats(&self, ui: &mut Ui) {
+        ui.label(format!("Violation mean: {}", -self.snapshot.violation_mean.log10()));
     }
 }
 
 impl SynchronousLoop for Gui {
     fn update_gui(&mut self, ctx: &mut EguiGuiExtendContext) {
+        if self.dock_viewer.kinetic_energy.len() > 8000 {
+            self.dock_viewer.kinetic_energy.clear();
+            self.dock_viewer.potential_energy.clear();
+            self.dock_viewer.mechanical_energy.clear();
+        }
 
-        for pos in self.receiver.try_iter() {
-            self.last_pos = pos;
+        for latest in self.graphic_receiver.try_iter() {
+            self.dock_viewer.snapshot = latest;
+            let time = self.dock_viewer.snapshot.date as f64;
+            let kinetic_energy = self.dock_viewer.snapshot.kinetic_energy as f64;
+            let potential_energy = self.dock_viewer.snapshot.potential_energy as f64;
+            if time < self.dock_viewer.kinetic_energy.last().map_or(0.0, |p| p.x) {
+                self.dock_viewer.kinetic_energy.clear();
+                self.dock_viewer.potential_energy.clear();
+                self.dock_viewer.mechanical_energy.clear();
+                self.dock_viewer.should_clear_graph = true;
+            }
+            self.dock_viewer
+                .kinetic_energy
+                .push(PlotPoint::new(time, kinetic_energy));
+            self.dock_viewer
+                .potential_energy
+                .push(PlotPoint::new(time, potential_energy));
+            self.dock_viewer
+                .mechanical_energy
+                .push(PlotPoint::new(time, kinetic_energy + potential_energy));
         }
 
         egui_dock::DockArea::new(&mut self.tree)
             .style(egui_dock::Style::from_egui(ctx.style().as_ref()))
-            .show(ctx, &mut Viewer{
-                pos: self.last_pos
-            });
+            .show(ctx, &mut self.dock_viewer);
     }
 }
 
 pub struct LogicLoop {
-    simulation: PendulumSystem,
-    graphic_sender: Sender<Vector2<f32>>
+    simulation: GameContent,
+    graphic_sender: Sender<WorldSnapshot>,
+    event_receiver: Receiver<Event>,
 }
 
 impl LogicLoop {
-    pub fn new(graphic_sender: Sender<Vector2<f32>>, tick_step: Duration) -> Self {
+    fn new(
+        graphic_sender: Sender<WorldSnapshot>,
+        event_receiver: Receiver<Event>,
+        tick_step: Duration,
+    ) -> Self {
+        let mut simulation = GameContent::empty(tick_step.as_secs_f32());
+        simulation.double();
         Self {
-            simulation: PendulumSystem::new(tick_step.as_secs_f32()),
-            graphic_sender
+            simulation,
+            graphic_sender,
+            event_receiver,
         }
     }
 }
 
 impl GameLoop for LogicLoop {
     fn tick(&mut self, _ctx: &GameContext) {
-        self.simulation.integrate();
+        if let Ok(Event { simulation, solver }) = self.event_receiver.try_recv() {
+            self.simulation.solver = solver;
+            match simulation {
+                SimulationContent::Simple => self.simulation.simple(),
+                SimulationContent::Double => self.simulation.double(),
+                SimulationContent::Triple => self.simulation.triple(),
+                SimulationContent::Rope => self.simulation.rope(),
+                SimulationContent::Rail => self.simulation.rail(),
+            };
+        }
+
         self.simulation.solve();
-        self.graphic_sender.send(self.simulation.body.position).unwrap();
+        let snapshot = self.simulation.take_snapshot();
+        self.graphic_sender.send(snapshot).unwrap();
     }
 }

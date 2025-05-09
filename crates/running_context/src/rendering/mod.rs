@@ -1,5 +1,5 @@
 mod contexts;
-mod line_renderer;
+//mod line_renderer;
 
 use std::iter::once;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use crate::rendering::contexts::{RenderContext, RenderSurface};
 
 struct Renderer {
     egui: egui_wgpu::Renderer,
-    line_renderer: line_renderer::LineRender,
+    //line_renderer: line_renderer::LineRender,
 }
 pub struct Graphic<'s> {
     ctx: RenderContext,
@@ -39,10 +39,11 @@ impl<'s> GraphicHandler for Graphic<'s> {
             wgpu::PresentMode::AutoVsync,
         );
         let surface = pollster::block_on(surface_future).expect("Error creating surface");
-        self.renderer = Some(Renderer {
+
+        self.renderer = self.renderer.take().or(Some(Renderer {
             egui: egui_wgpu::Renderer::new(&self.ctx.device().device, surface.config.format, None, 1, true),
-            line_renderer: line_renderer::LineRender::build(self.ctx.device(), surface.config.format),
-        });
+            //line_renderer: line_renderer::LineRender::build(self.ctx.device(), surface.config.format),
+        }));
         self.surface = Some(surface);
     }
 
@@ -119,7 +120,7 @@ impl<'s> GraphicHandler for Graphic<'s> {
                 &primitives,
                 &screen_descriptor,
             );
-            // renderer.line_renderer.draw(&mut render_pass); TODO: For now, I don't need rotations nor complexe shapes, so I'll stick with egui's primitives
+            // renderer.line_renderer.draw(&mut render_pass); TODO: For now, I don't need rotations nor complex shapes, so I'll stick with egui's primitives
         }
 
         for texture_id in textures_delta.free {

@@ -1,0 +1,73 @@
+\subsection{Changement d'ordre}\label{subsec:changement-d'ordre}
+Résoudre à l'ordre 0 (la position) est un problème non linéaire.
+Travailler sur la vitesse (ordre 1) est plus simple.
+Le programme exécute dans l'ordre les étapes suivantes :
+\begin{enumerate}
+    \item Intégrer la vitesse, via la méthode d'Euler implicite :
+    \[\underline{\dot{q}_{n + 1}} = \dot{q}_n + \Delta t WF \]
+    \item Corriger la vitesse
+    \item Intégrer la position à partir de la vitesse précédemment corrigée :
+\end{enumerate}
+
+
+Pour obtenir une contrainte sur la vitesse, on applique la règle de la chaîne :
+\[\dot{C} : \frac{dC}{dt} = \frac{\partial C}{\partial q} \dot{q}\]
+Notons $J = \frac{\partial C}{\partial q}$, ainsi $\dot{C} : J\dot{q} = 0$.
+J est la matrice jacobienne de la fonction associée à la contrainte.
+
+Dans l'exemple du pendule, $C$ est une fonction de deux variables, sa jacobienne est une matrice $1 \times 2$, ($J = \frac{q^\intercal}{||q||}$)
+
+\subsection{Definition de l'inconnue}\label{subsec:definition-l'inconnue}
+Les forces de corrections recherchées ne travaillent pas : $\mathcal{P}(F_c) = F_c \cdot \dot{q}$, Remarquons que :
+\[\forall \lambda \in \mathbb{R}, \left(J^\intercal \lambda\right) \cdot \dot{q} = (J^\intercal \lambda)^\intercal \dot{q} = \lambda J \dot{q} = 0\]
+Tout force colinéaire à $J$ ne travaille pas, par conséquent, on cherche à isoler $\lambda$ pour trouver la force de correction.
+$\lambda$ est le coefficient Lagrangien.
+
+\subsection{Mise en équation}\label{subsec:mise-en-equation}
+
+$\underline{\dot{q}}$ est la vitesse avant correction, $\dot{q_c}$ est la correction recherchée.
+\begin{gather*}
+    \dot{C} \Leftrightarrow J\dot{q} = 0\\
+    \Leftrightarrow J(\dot{q_c} + \underline{\dot{q}}) = 0\\
+    \Leftrightarrow J\dot{q_c} = -J\underline{\dot{q}}\\
+    \Leftrightarrow J W P_c = -J\underline{\dot{q}}\\
+    \Leftrightarrow J W \Delta t F_c = -J\underline{\dot{q}}\\
+    \Leftrightarrow J W \Delta t J^\intercal \lambda = -J\underline{\dot{q}}\\
+    \Leftrightarrow J W J^\intercal \lambda' = -J\underline{\dot{q}}
+\end{gather*}
+En posant $\lambda' = \Delta t \lambda$, ainsi $P_c = J^\intercal \lambda'$.\\
+$JWJ^\intercal$ peut être interprété comme l'inverse de la masse perçu par la contrainte.
+Dans un système avec une unique contrainte, $JWJ^\intercal$ est une matrice $1 \times 1$, on se ramène donc à équation polynomiale du premier degré.
+
+\subsection{Stabilisation du système}\label{subsec:stabilisation-du-systeme}
+Corriger uniquement la vitesse accumule les erreurs de positions, pour lutter contre, on utilise la stabilisation de Baumgarte, On pose :
+$\dot{C}' = \dot{C} + \frac{h}{\Delta t} \dot{C}$ où $h \in [0, 1]$ est un facteur d'amortissement.
+$h = 1$ correspond une correction en 1 tick.
+L'expression finale est :
+\[\boxed{J W J^\intercal \lambda' = -J\underline{\dot{q}} - \frac{h}{\Delta t} C}\]
+
+\subsection{Extension a un système de plusieurs contraintes}\label{subsec:extension-a-un-systeme-de-plusieurs-contraintes}
+Pour étendre la méthode à $n$ objets et $p$ contraintes, il faut considérer l'ensemble des vecteurs position comme un unique vecteur q de dimension $n \cdot d$,
+où $d$ est la dimension de l'espace.
+Les contraintes sont alors rassemblée dans une application :
+
+\[C : q  \mapsto
+\begin{pmatrix}
+    C_1 \\
+    \vdots \\
+    C_p
+\end{pmatrix}\]
+
+\begin{itemize}
+    \item La jacobienne $J$ devient une matrice $p  \times (n \cdot d)$.
+    \item $J W J^\intercal \lambda' = -J\underline{\dot{q}} - \frac{h}{\Delta t} \dot{C}$ est un système d'équations linéaires à $p$ inconnues,
+    que l'on peut résoudre par à l'aide du pivot de Gauss.
+    \item $J W J^\intercal$ est inversible s'il n'y a pas de redondance entre les contraintes ou de contrainte nulle.
+    \item On peut observer la 3\ieme loi de Newton dans les coefficients de $J$, une contrainte reliant deux corps entre eux appliquera une force sur les deux corps.
+    \item Les contraintes affectent le déplacement des objets et donc les autres contraintes.
+    Il est naturel de trouer un système linéaire les liant.
+\end{itemize}
+
+\subsection{Problèmes rencontrés}\label{subsec:problemes-rencontres}
+Les simulations avec cette méthode ont tendance à perdre de l'énergie lors de forte inflexion dans l'accélération/période de forte correction du solveur.
+La correction de Baumgarte n'est pas physiquement réaliste, mais permet de conserver des liens rigides entre les corps.

@@ -1,0 +1,38 @@
+Dans le but d'accroître la précision de la simulation, on a souhaité travailler à l'ordre 2, c'est-à-dire sur l'accélération.
+Les étapes du programme changent légèrement :
+\begin{enumerate}
+    \item Corriger la force appliquée sur l'objet pour satisfaire la contrainte
+    \item Calculer la position et vitesse à l'aide de l'intégration de Loup Verlet, qui est une méthode d'intégration à l'ordre 4 :
+    \begin{gather*}
+        q_{n + 1} = 2 q_n - q_{n - 1} + (\Delta t)^2 \ddot{q}\\
+        \dot{q}_{n + 1} =  \frac{q_{n + 1} + q_{n - 1}}{2\Delta t}\\
+    \end{gather*}
+\end{enumerate}
+\subsection{Changement d'ordre}\label{subsec:changement-d'ordre-acceleration}
+Pour obtenir une contrainte sur l'accélération, on dérive $\dot{C}$
+\[\ddot{C} : \dot{J}\dot{q} + J\ddot{q} = 0\]
+$\dot{J}\dot{q}$ est une écriture inutilement complexe, pour obtenir ce terme, il est plus facile de passer par l'égalité suivante :
+\[\dot{J}\dot{q} = \frac{d^2 C}{dt^2} - J\ddot{q}\]
+
+\subsection{Mise en équation}\label{subsec:mise-en-equation-acceleration}
+De la même manière que précédemment, on cherche à isoler $\lambda$ :
+\begin{gather*}
+    \ddot{C} \Leftrightarrow J\ddot{q} + \dot{J}\dot{q} = 0\\
+    \Leftrightarrow J\ddot{q} = -\dot{J}\dot{q}\\
+    \Leftrightarrow J W (F_c + F) = -\dot{J}\dot{q}\\
+    \Leftrightarrow J W F_c = -JWF -\dot{J}\dot{q}\\
+    \Leftrightarrow J W J^\intercal \lambda = -JWF -\dot{J}\dot{q}
+\end{gather*}
+
+\subsection{Stabilisation du système}\label{subsec:stabilisation-du-systeme-acceleration}
+Indique à l'ordre 1, a l'exception qu'il y a désormais deux termes de stabilisation :
+\[\ddot{C}' = \ddot{C} + \frac{h_v}{\Delta t} \dot{C} + \frac{h_p}{\Delta t^2} C\]
+Ce qui nous donne l'équation finale :
+\[\boxed{J W J^\intercal \lambda = -JWF -\dot{J}\dot{q} - \frac{h_v}{\Delta t} \dot{C} - \frac{h_p}{\Delta t^2} C}\]
+
+\subsection{Problèmes rencontrés}\label{subsec:problemes-rencontres-acceleration}
+Si effectivement cette méthode semble plus précise, elle est beaucoup plus soumise aux erreurs d'arrondis et d'intégration.
+Les erreurs de positions sont plus importantes, et la stabilisation de Baumgarte n'est pas suffisante pour corriger les erreurs.
+Des coefficients de stabilisation trop importants peuvent entrainer des oscillations dans le système, voir des divergences.
+À l'inverse, des coefficients trop faibles provoquent une mauvaise rigidité du système et des pertes d'énergie.
+Ce solveur donne de moins bons résultats que le solveur d'ordre 1.
