@@ -42,15 +42,23 @@ enum SimulationContent {
     Triple,
     Rope,
     Rail,
+    Structure,
+    Pulley,
+    PulleyAndRail,
+    Bridge,
 }
 
 impl SimulationContent {
-    const LIST: [SimulationContent; 5] = [
+    const LIST: [SimulationContent; 9] = [
         SimulationContent::Simple,
         SimulationContent::Double,
         SimulationContent::Triple,
         SimulationContent::Rope,
         SimulationContent::Rail,
+        SimulationContent::Structure,
+        SimulationContent::Pulley,
+        SimulationContent::PulleyAndRail,
+        SimulationContent::Bridge,
     ];
 }
 
@@ -174,9 +182,9 @@ impl DockViewer {
 
             for (widgets, force) in self.snapshot.links.iter() {
                 let lerp_color = if *force >= 0.0 {
-                    Color32::WHITE.lerp_to_gamma(Color32::LIGHT_BLUE, *force)
+                    Color32::WHITE.lerp_to_gamma(Color32::LIGHT_BLUE, *force * 0.008)
                 } else {
-                    Color32::WHITE.lerp_to_gamma(Color32::LIGHT_RED, -*force)
+                    Color32::WHITE.lerp_to_gamma(Color32::LIGHT_RED, -*force * 0.008)
                 };
 
                 match widgets {
@@ -230,7 +238,25 @@ impl DockViewer {
                                 Stroke::new(3.0, Color32::DARK_GRAY),
                             ));
                         }
+                    },
+                    ConstraintWidget::Pulley(a, b, anchor_a, anchor_b) => {
+                        let pos_a = to_screen_coordinates(self.snapshot.pos[*a]);
+                        let pos_b = to_screen_coordinates(self.snapshot.pos[*b]);
+                        let anchor_a = to_screen_coordinates(*anchor_a);
+                        let anchor_b = to_screen_coordinates(*anchor_b);
+
+                        shapes.push(Shape::line_segment(
+                            [pos_a, anchor_a],
+                            Stroke::new(3.0, lerp_color),
+                        ));
+                        shapes.push(Shape::line_segment(
+                            [pos_b, anchor_b],
+                            Stroke::new(3.0, lerp_color),
+                        ));
+                        shapes.push(Shape::circle_filled(anchor_a, 5.0, Color32::BLUE));
+                        shapes.push(Shape::circle_filled(anchor_b, 5.0, Color32::BLUE));
                     }
+
                     _ => (),
                 }
             }
@@ -263,6 +289,7 @@ impl DockViewer {
 
     fn display_stats(&self, ui: &mut Ui) {
         ui.label(format!("Violation mean: {}", -self.snapshot.violation_mean.log10()));
+        ui.label(format!("time taken to solve: {:?}", self.snapshot.calculation_time));
     }
 }
 
@@ -334,6 +361,10 @@ impl GameLoop for LogicLoop {
                 SimulationContent::Triple => self.simulation.triple(),
                 SimulationContent::Rope => self.simulation.rope(),
                 SimulationContent::Rail => self.simulation.rail(),
+                SimulationContent::Structure => self.simulation.structure(),
+                SimulationContent::Pulley => self.simulation.pulley(),
+                SimulationContent::PulleyAndRail => self.simulation.pulley_and_rail(),
+                SimulationContent::Bridge => self.simulation.bridge(),
             };
         }
 

@@ -1,70 +1,11 @@
 pub mod constraints;
+mod components;
 
-use std::ops::{AddAssign, Deref, DerefMut};
+use std::time::{Duration, Instant};
 use hecs::{Entity, World};
 use nalgebra::{DMatrix, DVector, Vector2};
-use crate::world::constraints::{AnchorConstraint, Constraint, ConstraintWidget, DistanceConstraint, PlaneConstraint};
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Position {
-    actual: Vector2<f32>,
-    last_tick: Vector2<f32>,
-}
-
-impl Deref for Position {
-    type Target = Vector2<f32>;
-    fn deref(&self) -> &Self::Target {
-        &self.actual
-    }
-}
-
-impl DerefMut for Position {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.actual
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Velocity(Vector2<f32>);
-
-impl Deref for Velocity {
-    type Target = Vector2<f32>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Velocity {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Acceleration(Vector2<f32>);
-
-impl Deref for Acceleration {
-    type Target = Vector2<f32>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Acceleration {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SubjectToPhysic(pub usize);
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Mass {
-    mass: f32,
-    inv_mass: f32,
-}
-
+use crate::world::components::{Acceleration, Mass, Position, SubjectToPhysic, Velocity};
+use crate::world::constraints::{AnchorConstraint, Constraint, ConstraintWidget, DistanceConstraint, PlaneConstraint, PulleyConstraint};
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Solver {
     FirstOrder,
@@ -89,9 +30,11 @@ pub struct GameContent {
     pub world: World,
     physic_index_to_entity: Vec<Entity>,
     constraints: Vec<Box<dyn Constraint>>,
+    applied_correction: DVector<f32>,
     gravity: Vector2<f32>,
     time_step: f32,
     age: u32,
+    calculation_time: Duration,
     violation_mean: f32,
     pub solver: Solver,
 }
@@ -103,9 +46,11 @@ impl GameContent {
             constraints: Vec::new(),
             physic_index_to_entity: Vec::new(),
             gravity: Vector2::new(0.0, -9.81),
+            applied_correction: DVector::zeros(0),
             time_step,
-            violation_mean: 0.0,
             age: 0,
+            calculation_time: Duration::from_millis(0),
+            violation_mean: 0.0,
             solver: Solver::HybridV3,
         }
     }
@@ -117,7 +62,7 @@ impl GameContent {
         self.age = 0;
     }
 
-    pub fn add_body(&mut self, pos: Vector2<f32>, velocity: Vector2<f32>, inv_mass: f32) -> Entity {
+    pub fn add_body(&mut self, pos: Vector2<f32>, velocity: Vector2<f32>, mass: f32) -> Entity {
         self.world.spawn((
             Position{
                 actual: pos,
@@ -127,8 +72,8 @@ impl GameContent {
             Acceleration(Vector2::new(0.0, 0.0)),
             SubjectToPhysic(0), // dummy value, this need to be updated in the build index system
             Mass {
-                mass: 1.0 / inv_mass,
-                inv_mass,
+                mass,
+                inv_mass: mass.recip(),
             },
         ))
     }
@@ -194,7 +139,7 @@ impl GameContent {
         self.gravity = Vector2::new(0.0, -9.81);
         let mut last_body = None;
         for i in 0..20 {
-            let body = self.add_body(Vector2::new(i as f32 * 0.25 - 5.0, 0.0), Vector2::new(0.0, 4.0), 10.0);
+            let body = self.add_body(Vector2::new(i as f32 * 0.25 - 5.0, 0.0), Vector2::new(0.0, 4.0), 0.1);
             if let Some(last_body) = last_body {
                 self.add_constraint(DistanceConstraint {
                     body_a: last_body,
@@ -231,6 +176,142 @@ impl GameContent {
             body_b: body3,
             distance: 1.0,
         })
+    }
+
+    pub fn structure(&mut self) {
+        self.clear();
+        self.gravity = Vector2::new(0.0, -9.81);
+        let b1 = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 0.0), 1.0);
+        let b2 = self.add_body(Vector2::new(1.25, 0.25), Vector2::new(0.0, 0.0), 1.0);
+        let b3 = self.add_body(Vector2::new(1.5, 0.0), Vector2::new(0.0, 0.0), 1.0);
+        let b4 = self.add_body(Vector2::new(1.25, -0.25), Vector2::new(0.0, 0.0), 1.0);
+        let r2 = 2.0f32.sqrt() * 0.25;
+        self.add_constraint(AnchorConstraint{
+            body: b2,
+            anchor: Vector2::new(0.0, 0.5),
+            distance: r2,
+        });
+        self.add_constraint(DistanceConstraint{
+            body_a: b1,
+            body_b: b2,
+            distance: r2,
+        });
+        self.add_constraint(DistanceConstraint{
+            body_a: b2,
+            body_b: b3,
+            distance: r2,
+        });
+        self.add_constraint(DistanceConstraint{
+            body_a: b3,
+            body_b: b4,
+            distance: r2,
+        });
+        self.add_constraint(DistanceConstraint{
+            body_a: b4,
+            body_b: b1,
+            distance: r2,
+        });
+        self.add_constraint(DistanceConstraint{
+            body_a: b1,
+            body_b: b3,
+            distance: 1.0,
+        });
+    }
+
+    pub fn pulley(&mut self) {
+        self.clear();
+        self.gravity = Vector2::new(0.0, -9.81);
+        let b1 = self.add_body(Vector2::new(-1.0, 0.0), Vector2::new(5.0, 0.0), 1.0);
+        let b2 = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(-1.0, 0.0), 1.0);
+        self.add_constraint(PulleyConstraint {
+            body_a: b1,
+            body_b: b2,
+            anchor_a: Vector2::new(-1.0, 1.0),
+            anchor_b: Vector2::new(1.0, 1.0),
+            distance: 2.0,
+        });
+    }
+
+    pub fn pulley_and_rail(&mut self) {
+        self.clear();
+        self.gravity = Vector2::new(0.0, -9.8);
+        let b1 = self.add_body(Vector2::new(-5.0, 0.0), Vector2::new(0.0, 0.0), 1.0);
+        let b2 = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(5.0, 0.0), 2.0);
+        self.add_constraint(PlaneConstraint::new(b1, Vector2::new(0.0, 1.0), Vector2::new(0.0, 0.0)));
+        self.add_constraint(PulleyConstraint {
+            body_a: b1,
+            body_b: b2,
+            anchor_a: Vector2::new(-1.0, 3.0),
+            anchor_b: Vector2::new(1.0, 1.0),
+            distance: 6.0,
+        });
+    }
+
+    fn add_triangle_strip(&mut self, entities: &[Entity]) {
+        let view = self.world.view::<&Position>();
+
+        let distance = |a, b| {
+            let a = view.get(a).unwrap();
+            let b = view.get(b).unwrap();
+            (a.actual - b.actual).norm()
+        };
+
+        let mut add_constraint = |a| {
+            self.constraints.push(Box::new(a));
+        };
+
+        if entities.len() < 2 { return; };
+        add_constraint(DistanceConstraint {
+            body_a: entities[0],
+            body_b: entities[1],
+            distance: distance(entities[0], entities[1]),
+        });
+        for trio in entities.windows(3) {
+            let (duo, [a]) = trio.split_at(2) else { return; };
+            for b in duo {
+                add_constraint(DistanceConstraint {
+                    body_a: *a,
+                    body_b: *b,
+                    distance: distance(*a, *b),
+                });
+            }
+        }
+    }
+
+    pub fn bridge(&mut self) {
+        self.clear();
+        self.gravity = Vector2::new(0.0, -9.8);
+        let bodies = [
+            self.add_body(Vector2::new(-1.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-1.0, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-1.0, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-0.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-0.5, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-0.0, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-0.0, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(0.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(0.5, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(1.0, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(1.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
+        ];
+        let load = self.add_body(Vector2::new(0.0, 1.0), Vector2::new(0.01, 0.0), 10.0);
+        self.add_constraint(DistanceConstraint{
+            body_a: bodies[5],
+            body_b: load,
+            distance: 1.0,
+        });
+        self.add_triangle_strip(&bodies);
+        self.add_constraint(AnchorConstraint{
+            body: bodies[0],
+            anchor: Vector2::new(-1.5, 1.0),
+            distance: 1.0,
+        });
+        self.add_constraint(AnchorConstraint{
+            body: bodies[11],
+            anchor: Vector2::new(1.5, 1.0),
+            distance: 1.0,
+        });
     }
 
     /// update all indices for all the bodies... this theoretically be lazy, but exact solver are slow anyway
@@ -352,14 +433,18 @@ impl GameContent {
             view.get(e).unwrap().0
         };
 
+        let widget_iter = self.constraints.iter().map(|c| c.widget(&convertor));
+        let force_iter = self.applied_correction.iter().cloned();
+        let links = widget_iter.zip(force_iter).collect();
 
         let r = WorldSnapshot {
             pos,
-            links: self.constraints.iter().map(|c| (c.widget(&convertor), 0.0)).collect(), // TODO: FIX constraint link
+            links, // TODO: FIX constraint link
             kinetic_energy,
             potential_energy,
-            violation_mean: self.violation_mean,
             date: self.age,
+            violation_mean: self.violation_mean,
+            calculation_time: self.calculation_time,
         };
         self.age += 1;
         r
@@ -369,6 +454,7 @@ impl GameContent {
         if self.physic_index_to_entity.is_empty() {
             self.update_solver_index()
         }
+        let begin = Instant::now();
         match self.solver {
             Solver::FirstOrder => self.solve_1st_order(),
             Solver::SecondOrder => self.solve_2nd_order(),
@@ -377,6 +463,7 @@ impl GameContent {
             Solver::HybridV3 => self.hybrid_v3(),
             Solver::HybridV4 => self.hybrid_v4(),
         }
+        self.calculation_time = begin.elapsed();
     }
 
     /// this solver is fine most of the time, but fail we enter a "too wrong" state, mainly where acceleration is too high and needs to be damped
@@ -388,7 +475,7 @@ impl GameContent {
 
         for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
             // euler integration
-            velocity.add_assign(self.gravity * self.time_step);
+            velocity.0 += self.gravity * self.time_step;
         }
 
         // this velocity vector tends to violate the constraints
@@ -399,13 +486,14 @@ impl GameContent {
         let cholesky = k.cholesky().unwrap();
         let b = -j * q_dot - (0.0/self.time_step) * c;
         let lambda = cholesky.solve(&b);
+        self.applied_correction = &lambda / self.time_step;
         let applied_momentum = jt * &lambda;
 
         // correct the velocity
         for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
             let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
             velocity.0 += momentum * mass.inv_mass;
-            pos.add_assign(velocity.0 * self.time_step);
+            pos.actual += velocity.0 * self.time_step;
         }
     }
 
@@ -426,6 +514,7 @@ impl GameContent {
         let b = - j_w_q2dot - j_dot_q_dot - (0.0/self.time_step) * c_dot - (0.0/(self.time_step * self.time_step)) * c;
         let lambda = cholesky.solve(&b);
         let applied_force = (jt * &lambda) + force;
+        self.applied_correction = lambda; // this solver is working with force, so we got what we want
 
         //integrate velocity and position
         for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
@@ -558,7 +647,7 @@ impl GameContent {
 
         for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
             // euler integration
-            velocity.add_assign(self.gravity * self.time_step);
+            velocity.0 += self.gravity * self.time_step;
         }
 
         // this velocity vector tends to violate the constraints
@@ -570,13 +659,16 @@ impl GameContent {
         let cholesky = k.cholesky().unwrap();
         let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5;
         let lambda = cholesky.solve(&b);
+
+        self.applied_correction = &lambda / self.time_step; //since we are working with momentum, we need to divide by the time step to get the applied force
+
         let applied_momentum = jt * &lambda;
 
         // correct the velocity
         for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
             let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
             velocity.0 += momentum * mass.inv_mass;
-            pos.add_assign(velocity.0 * self.time_step);
+            pos.actual += velocity.0 * self.time_step;
         }
     }
 
@@ -588,7 +680,7 @@ impl GameContent {
 
         for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
             // euler integration
-            velocity.add_assign(self.gravity * self.time_step);
+            velocity.0 += self.gravity * self.time_step;
         }
 
         // this velocity vector tends to violate the constraints
@@ -600,13 +692,14 @@ impl GameContent {
 
         let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5 - (1.0/6.0) * self.time_step * self.time_step * scary_thing;
         let lambda = cholesky.solve(&b);
+        self.applied_correction = &lambda / self.time_step;
         let applied_momentum = jt * &lambda;
 
         // correct the velocity
         for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
             let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
             velocity.0 += momentum * mass.inv_mass;
-            pos.add_assign(velocity.0 * self.time_step);
+            pos.actual += velocity.0 * self.time_step;
         }
 
         let _c = self.c_vector();
@@ -620,5 +713,6 @@ pub struct WorldSnapshot {
     pub kinetic_energy: f32,
     pub potential_energy: f32,
     pub date: u32,
+    pub calculation_time: Duration,
     pub violation_mean: f32,
 }

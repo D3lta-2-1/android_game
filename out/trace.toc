@@ -16,5 +16,6 @@
 \contentsline {subsection}{\numberline {0.3.4}Problèmes rencontrés}{6}{}%
 \contentsline {section}{\numberline {0.4}Mise en place d'un solveur hybride}{6}{}%
 \contentsline {subsection}{\numberline {0.4.1}Gain}{7}{}%
-\contentsline {subsection}{\numberline {0.4.2}Contraintes usuelles}{7}{}%
+\contentsline {section}{\numberline {0.5}Série de Taylor}{7}{}%
+\contentsline {section}{\numberline {0.6}Contraintes usuelles}{7}{}%
 \contentsline {subsubsection}{Pendule}{7}{}%

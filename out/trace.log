@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.9.8)  16 APR 2025 22:38
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.9.9)  14 MAY 2025 16:52
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -152,7 +152,7 @@ File: l3backend-pdftex.def 2024-05-08 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count290
 \l__pdf_internal_box=\box54
 )
-(C:/Users/imD3l/dev/rust/simple_game/out/trace.aux)
+(C:/Users/Etienne/dev/rust/android_game/out/trace.aux)
 \openout1 = `trace.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 9.
@@ -192,7 +192,7 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 [1
 
 {c:/texlive/2024/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]
-(C:/Users/imD3l/dev/rust/simple_game/out/trace.toc)
+(C:/Users/Etienne/dev/rust/android_game/out/trace.toc)
 \tf@toc=\write3
 \openout3 = `trace.toc'.
 
@@ -217,7 +217,7 @@ e l'in-verse de la masse per^^Xcu par la contrainte.
 [5])
 
 [6]
-Underfull \hbox (badness 10000) in paragraph at lines 100--101
+Underfull \hbox (badness 10000) in paragraph at lines 110--111
 
  []
 
@@ -225,17 +225,17 @@ Underfull \hbox (badness 10000) in paragraph at lines 100--101
 
 [7]
 
-[8] (C:/Users/imD3l/dev/rust/simple_game/out/trace.aux)
+[8] (C:/Users/Etienne/dev/rust/android_game/out/trace.aux)
  ***********
 LaTeX2e <2024-06-01> patch level 2
 L3 programming layer <2024-08-16>
  ***********
  ) 
 Here is how much of TeX's memory you used:
- 3706 strings out of 473579
- 61633 string characters out of 5732264
+ 3707 strings out of 473579
+ 61675 string characters out of 5732264
  1937960 words of memory out of 5000000
- 26608 multiletter control sequences out of 15000+600000
+ 26609 multiletter control sequences out of 15000+600000
  566387 words of font info for 67 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  56i,11n,65p,247b,428s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -254,8 +254,8 @@ e1/public/amsfonts/cm/cmsy8.pfb><c:/texlive/2024/texmf-dist/fonts/type1/public/
 amsfonts/symbols/msam10.pfb><c:/texlive/2024/texmf-dist/fonts/type1/public/amsf
 onts/symbols/msam7.pfb><c:/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/
 symbols/msbm10.pfb>
-Output written on C:/Users/imD3l/dev/rust/simple_game/out/trace.pdf (9 pages, 1
-85461 bytes).
+Output written on C:/Users/Etienne/dev/rust/android_game/out/trace.pdf (9 pages
+, 185666 bytes).
 PDF statistics:
  114 PDF objects out of 1000 (max. 8388607)
  70 compressed objects within 1 object stream
