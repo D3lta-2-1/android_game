@@ -74,6 +74,10 @@
     on a souhaité mettre en place un solveur hybride.
     Celui-ci chaine les deux solveurs, en utilisant le solveur d'ordre 1 pour les corrections de positions.
 
+    \subsection{Gain}\label{subsec:problemes-rencontres-hybride}
+    Ce solveur hybride est plus stable que les solveurs précédents, mais de l'ordre 1\% pour le double du temps de calcul.
+    Il est donc inutile en l'état actuel, car doubler la fréquence d'échantillonnage du solveur d'ordre 1 permet d'obtenir une simulation de meilleure qualité.
+
     \begin{enumerate}
         \item Corriger la force appliquée à l'aide du solveur d'ordre 2
         \item Intégrer la vitesse à l'aide de la méthode d'Euler implicite
@@ -84,11 +88,17 @@
         Il s'agit peut-être d'une accumulation avec la stabilisation de Baumgarte a l'ordre 1.
     \end{enumerate}
 
-    \subsection{Gain}\label{subsec:problemes-rencontres-hybride}
-    Ce solveur hybride est plus stable que les solveurs précédents, mais de l'ordre 1\% pour le double du temps de calcul.
-    Il est donc inutile en l'état actuel, car doubler la fréquence d'échantillonnage du solveur d'ordre 1 permet d'obtenir une simulation de meilleure qualité.
+    \section{Série de Taylor}\label{sec:serie-taylor}
+    On utilise la série de Taylor pour approximer la position et la vitesse à l'ordre 2.
+    \begin{gather*}
+        q(t + \Delta t) = q(t) + \dot{q}(t) \Delta t + \frac{\ddot{q}(t)}{2} \Delta t^2 + O(\Delta t^3)\\
+        \frac{q(t + \Delta t) - q(t)}{\Delta t}\ = \dot{q}(t) + \frac{\ddot{q}(t)}{2} \Delta t + O(\Delta t^2)\\
+        J W J^\intercal \lambda' = -J\dot{q} - \frac{1}{2 \Delta t}\dot{J}\dot{q}
+    \end{gather*}
 
-    \subsection{Contraintes usuelles}\label{subsec:contraintes-usuelles}
+
+
+    \section{Contraintes usuelles}\label{sec:contraintes-usuelles}
     Quelques contraintes usuelles en deux dimensions :
     $q = \begin{pmatrix}
              x\\
