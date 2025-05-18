@@ -13,16 +13,18 @@ pub enum Solver {
     FirstOrderWithPrepass,
     HybridV2,
     HybridV3,
+    HybridV3cgm,
     HybridV4,
 }
 
 impl Solver {
-    pub const LIST: [Solver; 6] = [
+    pub const LIST: [Solver; 7] = [
         Solver::FirstOrder,
         Solver::SecondOrder,
         Solver::FirstOrderWithPrepass,
         Solver::HybridV2,
         Solver::HybridV3,
+        Solver::HybridV3cgm,
         Solver::HybridV4,
     ];
 }
@@ -324,6 +326,7 @@ impl GameContent {
             *index = SubjectToPhysic(i);
             self.physic_index_to_entity.push(entity)
         }
+        self.applied_correction = DVector::zeros(self.constraints.len());
     }
 
     /// q_dot is the combined velocity of all bodies
@@ -461,6 +464,7 @@ impl GameContent {
             Solver::FirstOrderWithPrepass => self.solve_with_prepass(),
             Solver::HybridV2 => self.hybrid_v2(),
             Solver::HybridV3 => self.hybrid_v3(),
+            Solver::HybridV3cgm => self.hydrid_v3_cgm(),
             Solver::HybridV4 => self.hybrid_v4(),
         }
         self.calculation_time = begin.elapsed();
@@ -659,6 +663,57 @@ impl GameContent {
         let cholesky = k.cholesky().unwrap();
         let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5;
         let lambda = cholesky.solve(&b);
+
+        self.applied_correction = &lambda / self.time_step; //since we are working with momentum, we need to divide by the time step to get the applied force
+
+        let applied_momentum = jt * &lambda;
+
+        // correct the velocity
+        for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
+            let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
+            velocity.0 += momentum * mass.inv_mass;
+            pos.actual += velocity.0 * self.time_step;
+        }
+    }
+
+    fn hydrid_v3_cgm(&mut self) {
+        let inv_mass_matrix = self.inv_mass_matrix();
+        let j = self.j_matrix();
+        let jt = j.transpose();
+        let a = &j * &inv_mass_matrix * &jt;
+
+        for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
+            // euler integration
+            velocity.0 += self.gravity * self.time_step;
+        }
+
+        // this velocity vector tends to violate the constraints
+        let q_dot = self.q_dot_vector();
+        let j_dot_q_dot = self.j_dot_q_dot();
+
+        let _c = self.c_vector();
+
+        let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5;
+
+        // conjugate gradient method here
+        //let mut lambda = DVector::zeros(self.constraints.len());
+        let mut lambda = &self.applied_correction * self.time_step; // it should be a nice guess, at least better than zeros
+        {
+            let mut r = b - &a * &lambda;
+            let mut p = r.clone();
+            let mut k = 0;
+            loop {
+                k += 1;
+                let alpha = r.dot(&r) / p.dot(&(&a * &p));
+                lambda += alpha * &p;
+                let r_dot_r = r.dot(&r);
+                r -= alpha * &a * &p;
+                if r.norm() < 1e-6 { break; }
+                let beta = r.dot(&r) / r_dot_r;
+                p = &r + beta * &p;
+            }
+            println!("CGM iterations: {}", k);
+        }
 
         self.applied_correction = &lambda / self.time_step; //since we are working with momentum, we need to divide by the time step to get the applied force
 
