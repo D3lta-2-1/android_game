@@ -69,9 +69,13 @@ pub struct RenderContext {
 impl RenderContext {
     pub fn new() -> Self {
         Self {
-            #[cfg(all(target_arch = "arm64", target_arch = "windows"))]
-            instance: wgpu::Instance::new(wgpu::Backends::DX12),
-            #[cfg(not(all(target_arch = "x86_64", target_arch = "windows")))]
+            #[cfg(all(target_arch = "aarch64", target_os = "windows"))]
+            instance: wgpu::Instance::new(&wgpu::InstanceDescriptor{
+                backends: wgpu::Backends::DX12,
+                flags: Default::default(),
+                backend_options: Default::default(),
+            }),
+            #[cfg(not(all(target_arch = "aarch64", target_os = "windows")))]
             instance: wgpu::Instance::new(&wgpu::InstanceDescriptor::default()),
             device: None,
         }
