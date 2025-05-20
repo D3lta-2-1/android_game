@@ -8,20 +8,30 @@ pub struct DeviceHandle {
 
 impl DeviceHandle {
     async fn new<'s>(ctx: &RenderContext, surface: &wgpu::Surface<'_>) -> Self {
-        let adapter = ctx.instance.request_adapter(&wgpu::RequestAdapterOptions{
-            power_preference: Default::default(),
-            force_fallback_adapter: false, //don't know why, window do not like the fallback adapter
-            compatible_surface: Some(&surface),
-        }).await.unwrap();
+        let adapter = ctx
+            .instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: Default::default(),
+                force_fallback_adapter: false, //don't know why, window do not like the fallback adapter
+                compatible_surface: Some(&surface),
+            })
+            .await
+            .unwrap();
 
         assert!(adapter.features().contains(Features::POLYGON_MODE_LINE)); //TODO: support that properly
 
-        let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor{
-            label: None, // may add some kind of naming ?
-            required_features: Features::POLYGON_MODE_LINE,
-            required_limits: Default::default(),
-            memory_hints: Default::default(),
-        }, None).await.unwrap();
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None, // may add some kind of naming ?
+                    required_features: Features::POLYGON_MODE_LINE,
+                    required_limits: Default::default(),
+                    memory_hints: Default::default(),
+                },
+                None,
+            )
+            .await
+            .unwrap();
 
         Self {
             device,
@@ -33,7 +43,7 @@ impl DeviceHandle {
 
 pub struct RenderSurface<'s> {
     pub surface: wgpu::Surface<'s>,
-    pub config: wgpu::SurfaceConfiguration
+    pub config: wgpu::SurfaceConfiguration,
 }
 
 impl<'s> RenderSurface<'s> {
@@ -59,6 +69,9 @@ pub struct RenderContext {
 impl RenderContext {
     pub fn new() -> Self {
         Self {
+            #[cfg(all(target_arch = "arm64", target_arch = "windows"))]
+            instance: wgpu::Instance::new(wgpu::Backends::DX12),
+            #[cfg(not(all(target_arch = "x86_64", target_arch = "windows")))]
             instance: wgpu::Instance::new(&wgpu::InstanceDescriptor::default()),
             device: None,
         }
@@ -79,26 +92,28 @@ impl RenderContext {
     }
 
     /** create a surface with a given present mode, if not supported, another mod will be used in fallback...
-    *   this also ensure a ``DeviceHandle``, containing respective ``wgpu::Device``, ``wpgu::Adpter`` and ``wgpu::Queue``, will be initiated
-    *   all of this can be retried using ``RenderContext::device_handle()``
-    **/
-    pub async fn create_surface<'w>(&mut self,
-                                    target: impl Into<wgpu::SurfaceTarget<'w>>,
-                                    (width, height): (u32, u32),
-                                    present_mode: wgpu::PresentMode) -> Result<RenderSurface<'w>, wgpu::CreateSurfaceError> {
+     *   this also ensure a ``DeviceHandle``, containing respective ``wgpu::Device``, ``wpgu::Adpter`` and ``wgpu::Queue``, will be initiated
+     *   all of this can be retried using ``RenderContext::device_handle()``
+     **/
+    pub async fn create_surface<'w>(
+        &mut self,
+        target: impl Into<wgpu::SurfaceTarget<'w>>,
+        (width, height): (u32, u32),
+        present_mode: wgpu::PresentMode,
+    ) -> Result<RenderSurface<'w>, wgpu::CreateSurfaceError> {
         let surface = self.instance.create_surface(target.into())?;
 
         // find or create a suitable device
         self.device_for_surface(&surface).await;
 
-        let wgpu::SurfaceCapabilities {
-            formats,
-            ..
-        } = surface.get_capabilities(&self.device().adapter);
+        let wgpu::SurfaceCapabilities { formats, .. } =
+            surface.get_capabilities(&self.device().adapter);
 
         // chose a texture_format for the swap chain
-        let format = formats.into_iter()
-            .find(|format| !format.is_srgb() && format.components() == 4).unwrap();
+        let format = formats
+            .into_iter()
+            .find(|format| !format.is_srgb() && format.components() == 4)
+            .unwrap();
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

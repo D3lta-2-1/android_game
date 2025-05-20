@@ -1,14 +1,14 @@
 extern crate core;
 
-use std::time::Duration;
-use winit::application::ApplicationHandler;
-use running_context::event_handling::EventHandler;
-use running_context::rendering::Graphic;
 use crate::game_core::GameCore;
 use crate::logic_hook::LogicHook;
+use running_context::event_handling::EventHandler;
+use running_context::rendering::Graphic;
+use std::time::Duration;
+use winit::application::ApplicationHandler;
 
-mod logic_hook;
 mod game_core;
+mod logic_hook;
 mod world;
 
 pub fn new_app() -> impl ApplicationHandler {

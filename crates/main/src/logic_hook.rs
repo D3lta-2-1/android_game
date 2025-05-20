@@ -1,8 +1,8 @@
+use running_context::event_handling::{EguiGuiExtendContext, LogicHandler};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-use running_context::event_handling::{EguiGuiExtendContext, LogicHandler};
 
 /**
  *   ``LogicHook`` is a struct that is used to run the game logic in a separate thread.
@@ -19,20 +19,27 @@ pub struct LogicHook<T: SynchronousLoop> {
 
 impl<T: SynchronousLoop> LogicHook<T> {
     // this is kinda ugly... I might look into dynamic dispatching
-    pub fn new((sync_loop, mut logic): (T, impl GameLoop + 'static), tick_length: Duration) -> Self {
+    pub fn new(
+        (sync_loop, mut logic): (T, impl GameLoop + 'static),
+        tick_length: Duration,
+    ) -> Self {
         let keep_running = Arc::new(AtomicBool::new(true));
 
         let mut game_context = GameContext::new_empty(tick_length, keep_running.clone());
-        let game_thread = Some(thread::spawn(move || { // Logic loop
+        let game_thread = Some(thread::spawn(move || {
+            // Logic loop
             game_context.start();
             while game_context.wait_until_next_tick() {
                 logic.tick(&game_context);
             }
             logic.exit();
-        }
-        ));
+        }));
 
-        let hook = LogicHook { sync_loop, game_thread, keep_running };
+        let hook = LogicHook {
+            sync_loop,
+            game_thread,
+            keep_running,
+        };
         hook
     }
 }
@@ -53,7 +60,7 @@ pub struct GameContext {
     next_tick: Instant,
     tick_length: Duration,
     tick_count: u64,
-    keep_running: Arc<AtomicBool>
+    keep_running: Arc<AtomicBool>,
 }
 impl GameContext {
     fn new_empty(tick_length: Duration, keep_running: Arc<AtomicBool>) -> Self {
@@ -79,14 +86,12 @@ impl GameContext {
         } else {
             false
         }
-
     }
-
 }
 
 pub trait GameLoop: Send {
     fn tick(&mut self, ctx: &GameContext);
-    fn exit(&mut self){}
+    fn exit(&mut self) {}
 }
 
 pub trait SynchronousLoop {

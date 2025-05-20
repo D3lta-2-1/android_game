@@ -10,9 +10,10 @@ pub fn main(android_app: winit::platform::android::activity::AndroidApp) {
 
     let mut app = new_app();
 
-    EventLoop::with_user_event().with_android_app(android_app).build().unwrap()
+    EventLoop::with_user_event()
+        .with_android_app(android_app)
+        .build()
+        .unwrap()
         .run_app(&mut app)
         .expect("Couldn't run event loop");
 }
-
-
