@@ -1,8 +1,8 @@
 mod components;
 pub mod constraints;
 
-use crate::world::components::{Acceleration, Mass, Position, SubjectToPhysic, Velocity};
-use crate::world::constraints::{
+use crate::rigid_body::components::{Acceleration, Mass, Position, SubjectToPhysic, Velocity};
+use crate::rigid_body::constraints::{
     AnchorConstraint, Constraint, ConstraintWidget, DistanceConstraint, PlaneConstraint,
     PulleyConstraint,
 };
@@ -17,19 +17,21 @@ pub enum Solver {
     HybridV2,
     HybridV3,
     HybridV4,
+    SurTicking,
 }
 
 impl Solver {
-    pub const LIST: [Solver; 6] = [
+    pub const LIST: [Solver; 7] = [
         Solver::FirstOrder,
         Solver::SecondOrder,
         Solver::FirstOrderWithPrepass,
         Solver::HybridV2,
         Solver::HybridV3,
         Solver::HybridV4,
+        Solver::SurTicking,
     ];
 }
-pub struct GameContent {
+pub struct BodiesSimulation {
     pub world: World,
     physic_index_to_entity: Vec<Entity>,
     constraints: Vec<Box<dyn Constraint>>,
@@ -42,7 +44,7 @@ pub struct GameContent {
     pub solver: Solver,
 }
 
-impl GameContent {
+impl BodiesSimulation {
     pub fn empty(time_step: f32) -> Self {
         Self {
             world: World::new(),
@@ -513,6 +515,7 @@ impl GameContent {
             Solver::HybridV2 => self.hybrid_v2(),
             Solver::HybridV3 => self.hybrid_v3(),
             Solver::HybridV4 => self.hybrid_v4(),
+            Solver::SurTicking => self.sur_ticking(),
         }
         self.calculation_time = begin.elapsed();
     }
@@ -813,6 +816,52 @@ impl GameContent {
         }
 
         let _c = self.c_vector();
+    }
+
+    fn sur_ticking(&mut self) {
+        let inv_mass_matrix = self.inv_mass_matrix();
+        let j = self.j_matrix();
+        let jt = j.transpose();
+        let k = &j * &inv_mass_matrix * &jt;
+
+        for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
+            // euler integration
+            velocity.0 += self.gravity * self.time_step;
+        }
+
+        // this velocity vector tends to violate the constraints
+        let q_dot = self.q_dot_vector();
+        let j_dot_q_dot = self.j_dot_q_dot();
+
+        let _c = self.c_vector();
+
+        let cholesky = k.cholesky().unwrap();
+        let b = -&j * &q_dot - &j_dot_q_dot * self.time_step * 0.5;
+        let lambda = cholesky.solve(&b);
+        self.applied_correction = &lambda / self.time_step; //since we are working with momentum, we need to divide by the time step to get the applied force
+        let applied_momentum = &jt * &lambda;
+        let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.25;
+        let lambda_vel = cholesky.solve(&b);
+        let applied_momentum_on_vel = jt * &lambda_vel;
+
+        // correct the velocity
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
+            let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
+            let momentum_on_vel = Vector2::new(
+                applied_momentum_on_vel[i * 2],
+                applied_momentum_on_vel[i * 2 + 1],
+            );
+            let next_pos =
+                pos.actual + (velocity.0 + momentum_on_vel * mass.inv_mass) * self.time_step * 2.0;
+            pos.actual += (velocity.0 + momentum * mass.inv_mass) * self.time_step;
+            let next_velocity = (next_pos - pos.actual) / self.time_step;
+            velocity.0 = (velocity.0 + momentum * mass.inv_mass + next_velocity) / 2.0;
+        }
     }
 }
 

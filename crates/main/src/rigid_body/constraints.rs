@@ -1,4 +1,4 @@
-use crate::world::components::{Acceleration, Position, SubjectToPhysic, Velocity};
+use crate::rigid_body::components::{Acceleration, Position, SubjectToPhysic, Velocity};
 use hecs::{Entity, View};
 use nalgebra::{Dyn, MatrixViewMut, U1, Vector2};
 

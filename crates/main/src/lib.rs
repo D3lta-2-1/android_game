@@ -7,9 +7,10 @@ use running_context::rendering::Graphic;
 use std::time::Duration;
 use winit::application::ApplicationHandler;
 
+mod fluid_simulation;
 mod game_core;
 mod logic_hook;
-mod world;
+mod rigid_body;
 
 pub fn new_app() -> impl ApplicationHandler {
     // for tracing purposes, nothing should be created before the EventHandler itself

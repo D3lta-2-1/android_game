@@ -18,7 +18,7 @@ impl DeviceHandle {
             .await
             .unwrap();
 
-        assert!(adapter.features().contains(Features::POLYGON_MODE_LINE)); //TODO: support that properly
+        //assert!(adapter.features().contains(Features::POLYGON_MODE_LINE)); //TODO: support that properly
 
         let (device, queue) = adapter
             .request_device(
@@ -70,13 +70,13 @@ impl RenderContext {
     pub fn new() -> Self {
         Self {
             #[cfg(all(target_arch = "aarch64", target_os = "windows"))]
-            instance: wgpu::Instance::new(&wgpu::InstanceDescriptor{
+            instance: wgpu::Instance::new(&wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::DX12,
                 flags: Default::default(),
                 backend_options: Default::default(),
             }),
             #[cfg(not(all(target_arch = "aarch64", target_os = "windows")))]
-            instance: wgpu::Instance::new(&wgpu::InstanceDescriptor::default()),
+            instance: wgpu::Instance::default(),
             device: None,
         }
     }
