@@ -1,14 +1,14 @@
+use crate::fluid_simulation::{FluidSimulation, FluidSnapshot};
 use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
 use crate::rigid_body::constraints::ConstraintWidget;
 use crate::rigid_body::{BodiesSimulation, Solver, WorldSnapshot};
-use egui::{Color32, Frame, Pos2, Shape, Stroke, Ui, WidgetText, vec2, Rect, CornerRadius};
+use egui::{Color32, CornerRadius, Frame, Pos2, Rect, Shape, Stroke, Ui, WidgetText, vec2};
 use egui_dock::TabViewer;
 use egui_plot::{Legend, Line, Plot, PlotPoint};
 use nalgebra::Vector2;
 use running_context::event_handling::EguiGuiExtendContext;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
-use crate::fluid_simulation::{FluidSimulation, FluidSnapshot};
 
 pub struct GameCore;
 
@@ -71,7 +71,10 @@ pub struct Gui {
 }
 
 impl Gui {
-    fn new(receiver: Receiver<(WorldSnapshot, FluidSnapshot)>, event_sender: Sender<Event>) -> Self {
+    fn new(
+        receiver: Receiver<(WorldSnapshot, FluidSnapshot)>,
+        event_sender: Sender<Event>,
+    ) -> Self {
         Self {
             graphic_receiver: receiver,
             dock_viewer: DockViewer {
@@ -85,7 +88,13 @@ impl Gui {
                 selected_solver: Solver::HybridV3,
                 should_clear_graph: false,
             },
-            tree: egui_dock::DockState::new(vec![Tab::Bodies, Tab::Fluid, Tab::Button, Tab::Plots, Tab::Stats]),
+            tree: egui_dock::DockState::new(vec![
+                Tab::Bodies,
+                Tab::Fluid,
+                Tab::Button,
+                Tab::Plots,
+                Tab::Stats,
+            ]),
         }
     }
 }
@@ -274,32 +283,41 @@ impl DockViewer {
     }
 
     fn draw_fluid_simulation(&self, ui: &mut Ui) {
-        ui.label(format!("cell count {}", self.fluid_snapshot.densities.len()));
-        Frame::canvas(ui.style()).show(ui, |ui| {
-            let desired_size = vec2(ui.available_width(), ui.available_height());
-            let (_id, rect) = ui.allocate_space(desired_size);
+        let desired_size = vec2(ui.available_width(), ui.available_height());
+        let (_id, rect) = ui.allocate_space(desired_size);
 
-            let center = rect.center();
-            let cell_size = self.fluid_snapshot.cell_size;
+        let center = rect.center();
+        let cell_size = self.fluid_snapshot.cell_size;
 
-            let to_screen_coordinates = |p: Vector2<isize>| {
-                let mut p = Pos2::new(p.x as f32  * cell_size * 70.0, p.y as f32 * cell_size * -70.0);
-                p += center.to_vec2();
-                Rect::from_points(&[p, p + vec2(  cell_size * 70.0 + 0.0001,  cell_size * -70.0 + 0.0001)])
 
-            };
-            //ui.painter().add(Shape::rect_filled(to_screen_coordinates(Vector2::new(0,0)), CornerRadius::ZERO, Color32::WHITE));
-            let shapes : Vec<_> = self.fluid_snapshot.densities.iter().enumerate().map(|(i,x)|{
-                let pos= self.fluid_snapshot.access_mask.index_to_pos(i);
+        // todo: improve rendering code because it's shitty
+        let to_screen_coordinates = |p: Vector2<isize>| {
+            let mut p = Pos2::new(
+                p.x as f32 * cell_size * 70.0,
+                p.y as f32 * cell_size * -70.0,
+            );
+            p += center.to_vec2();
+            Rect::from_points(&[
+                p,
+                p + vec2(cell_size * 70.0, cell_size * -70.0),
+            ])
+        };
+        let shapes: Vec<_> = self
+            .fluid_snapshot
+            .densities
+            .iter()
+            .enumerate()
+            .map(|(i, x)| {
+                let pos = self.fluid_snapshot.access_mask.index_to_pos(i);
                 let color = if *x > 0.0 {
-                    Color32::WHITE.lerp_to_gamma(Color32::BLUE,  0.1 * *x)
+                    Color32::WHITE.lerp_to_gamma(Color32::BLUE, 0.1 * *x)
                 } else {
-                    Color32::WHITE.lerp_to_gamma(Color32::RED, - 0.1 *x)
+                    Color32::WHITE.lerp_to_gamma(Color32::RED, -0.1 * x)
                 };
                 Shape::rect_filled(to_screen_coordinates(pos), CornerRadius::ZERO, color)
-            }).collect();
-            ui.painter().extend(shapes)
-        });
+            })
+            .collect();
+        ui.painter().extend(shapes)
     }
 
     fn draw_plot(&mut self, ui: &mut Ui) {
@@ -415,6 +433,8 @@ impl GameLoop for LogicLoop {
         self.fluid_simulation.tick();
         let bodies_snapshot = self.bodies_simulation.take_snapshot();
         let fluid_snapshot = self.fluid_simulation.take_snapshot();
-        self.graphic_sender.send((bodies_snapshot, fluid_snapshot)).unwrap();
+        self.graphic_sender
+            .send((bodies_snapshot, fluid_snapshot))
+            .unwrap();
     }
 }

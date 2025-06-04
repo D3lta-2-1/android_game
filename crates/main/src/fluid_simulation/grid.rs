@@ -16,11 +16,15 @@ impl SquareMask {
     /// Decode Morton index into coordinates (x, y)
     fn morton_decode(&self, z: usize) -> Vector2<isize> {
         let half_size = 1 << (self.power_of_two - 1);
-        Vector2::new(Self::compact1by1(z) as isize, Self::compact1by1(z >> 1) as isize)
-            - Vector2::new(half_size, half_size)
+        Vector2::new(
+            Self::compact1by1(z) as isize,
+            Self::compact1by1(z >> 1) as isize,
+        ) - Vector2::new(half_size, half_size)
     }
 
-    pub fn index_to_pos(&self, z: usize) -> Vector2<isize> { self.morton_decode(z) }
+    pub fn index_to_pos(&self, z: usize) -> Vector2<isize> {
+        self.morton_decode(z)
+    }
 
     pub fn get<T: Copy>(&self, slice: &[T], pos: Vector2<isize>, default: T) -> T {
         let safe_range = self.range();
@@ -59,9 +63,7 @@ impl SquareMask {
     }
 
     pub fn new(size: usize) -> Self {
-        Self {
-            power_of_two: size,
-        }
+        Self { power_of_two: size }
     }
 
     pub fn create_grid<T: Clone>(&self, t: T) -> Vec<T> {
