@@ -289,17 +289,18 @@ impl DockViewer {
         let center = rect.center();
         let cell_size = self.fluid_snapshot.cell_size;
 
-
-        // todo: improve rendering code because it's shitty
-        let to_screen_coordinates = |p: Vector2<isize>| {
-            let mut p = Pos2::new(
+        let to_screen_coordinate = |p: Vector2<isize>| {
+            Pos2::new(
                 p.x as f32 * cell_size * 70.0,
                 p.y as f32 * cell_size * -70.0,
-            );
-            p += center.to_vec2();
+            ) + center.to_vec2()
+        };
+
+        // todo: improve rendering code because it's shitty
+        let get_rec = |p: Vector2<isize>| {
             Rect::from_points(&[
-                p,
-                p + vec2(cell_size * 70.0, cell_size * -70.0),
+                to_screen_coordinate(p),
+                to_screen_coordinate(p + Vector2::new(1, 1)),
             ])
         };
         let shapes: Vec<_> = self
@@ -314,7 +315,7 @@ impl DockViewer {
                 } else {
                     Color32::WHITE.lerp_to_gamma(Color32::RED, -0.1 * x)
                 };
-                Shape::rect_filled(to_screen_coordinates(pos), CornerRadius::ZERO, color)
+                Shape::rect_filled(get_rec(pos), CornerRadius::ZERO, color)
             })
             .collect();
         ui.painter().extend(shapes)

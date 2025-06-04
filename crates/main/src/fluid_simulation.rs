@@ -34,6 +34,7 @@ impl FluidSimulation {
         Vector2::new(0, -1), // Up
     ];
 
+    #[rustfmt::skip]
     pub fn divergence_step(&mut self) {
         for i in self.access_mask.index_range() {
             let neighbours = Self::NEIGHBOURS
@@ -52,22 +53,16 @@ impl FluidSimulation {
             let vel = self.velocities[i];
             divergence -= vel.x;
             divergence -= vel.y;
-            divergence += self
-                .access_mask
-                .get(
+            divergence += self.access_mask.get(
                     &self.velocities,
                     self.access_mask.index_to_pos(i) + Vector2::new(1, 0),
                     Vector2::new(0.0, 0.0),
-                )
-                .x;
-            divergence += self
-                .access_mask
-                .get(
+                ).x;
+            divergence += self.access_mask.get(
                     &self.velocities,
                     self.access_mask.index_to_pos(i) + Vector2::new(0, 1),
                     Vector2::new(0.0, 0.0),
-                )
-                .y;
+                ).y;
             self.velocities[i] += Vector2::new(divergence / neighbours, divergence / neighbours);
             self.access_mask.set(
                 &mut self.velocities,
@@ -86,32 +81,36 @@ impl FluidSimulation {
         }
     }
 
+    //TODO: combine those functions
+    #[rustfmt::skip]
     pub fn interpolate_vec(&self, grid: &[Vector2<f32>], pos: Vector2<f32>) -> Vector2<f32> {
         let tx = pos.x.fract();
         let ty = pos.y.fract();
         let pos = Vector2::new(pos.x.floor() as isize, pos.y.floor() as isize);
-        let v00 = self.access_mask.get(grid, pos, Vector2::new(0.0, 0.0));
-        let v10 = self
-            .access_mask
-            .get(grid, pos + Vector2::new(1, 0), Vector2::new(0.0, 0.0));
-        let v01 = self
-            .access_mask
-            .get(grid, pos + Vector2::new(0, 1), Vector2::new(0.0, 0.0));
-        let v11 = self
-            .access_mask
-            .get(grid, pos + Vector2::new(1, 1), Vector2::new(0.0, 0.0));
-        (1.0 - ty) * (v00 * (1.0 - tx) + v10 * tx) + ty * (v01 * (1.0 - tx) + v11 * tx)
-    }
+        let v00 = self.access_mask.get(grid, pos + Vector2::new(0, 0), Vector2::new(0.0, 0.0));
+        let v10 = self.access_mask.get(grid, pos + Vector2::new(1, 0), Vector2::new(0.0, 0.0));
+        let v01 = self.access_mask.get(grid, pos + Vector2::new(0, 1), Vector2::new(0.0, 0.0));
+        let v11 = self.access_mask.get(grid, pos + Vector2::new(1, 1), Vector2::new(0.0, 0.0));
+        //(1.0 - ty) * (v00 * (1.0 - tx) + v10 * tx) + ty * (v01 * (1.0 - tx) + v11 * tx)
+        (1.0 - tx) * (1.0 - ty) * v00
+            + tx * (1.0 - ty) * v10
+            + (1.0 - tx) * ty * v01
+            + tx * tx * v11
+        }
 
     pub fn interpolate(&self, grid: &[f32], pos: Vector2<f32>) -> f32 {
         let tx = pos.x.fract();
         let ty = pos.y.fract();
         let pos = Vector2::new(pos.x.floor() as isize, pos.y.floor() as isize);
-        let v00 = self.access_mask.get(grid, pos, 0.0);
+        let v00 = self.access_mask.get(grid, pos  + Vector2::new(0, 0), 0.0);
         let v10 = self.access_mask.get(grid, pos + Vector2::new(1, 0), 0.0);
         let v01 = self.access_mask.get(grid, pos + Vector2::new(0, 1), 0.0);
         let v11 = self.access_mask.get(grid, pos + Vector2::new(1, 1), 0.0);
-        (1.0 - ty) * (v00 * (1.0 - tx) + v10 * tx) + ty * (v01 * (1.0 - tx) + v11 * tx)
+        //(1.0 - ty) * (v00 * (1.0 - tx) + v10 * tx) + ty * (v01 * (1.0 - tx) + v11 * tx)
+        (1.0 - tx) * (1.0 - ty) * v00
+            + tx * (1.0 - ty) * v10
+            + (1.0 - tx) * ty * v01
+            + tx * tx * v11
     }
 
     pub fn advect(&mut self) {
@@ -133,21 +132,23 @@ impl FluidSimulation {
     }
 
     pub fn tick(&mut self) {
-        self.access_mask
-            .set(&mut self.velocities, Vector2::new(0, 0), |vel| {
-                *vel = Vector2::new(1.0, 0.0); // Reset velocities at the origin
-            });
-        self.access_mask
-            .set(&mut self.densities, Vector2::new(0, 0), |density| {
-                *density = 1.0; // Reset densities at the origin
-            });
-
         for _ in 0..20 {
             self.divergence_step();
         }
         self.advect();
+        for x in -5..5 {
+            for y in -5..5 {
+                self.access_mask
+                    .set(&mut self.velocities, Vector2::new(x, y), |vel| {
+                        *vel = Vector2::new(0.1, 0.0); // Reset velocities at the origin
+                    });
+                self.access_mask
+                    .set(&mut self.densities, Vector2::new(x, y), |density| {
+                        *density = 1.0; // Reset densities at the origin
+                    });
 
-        // Implement the simulation step logic here
+            }
+        }
     }
 
     pub fn take_snapshot(&self) -> FluidSnapshot {
