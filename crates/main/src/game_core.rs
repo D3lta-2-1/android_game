@@ -220,7 +220,7 @@ impl DockViewer {
                         // => y = (d - ax) / b
                         // => x = (d - by) / a
                         let points = [
-                            Pos2::new(x1,(d - a * x1) / b),
+                            Pos2::new(x1, (d - a * x1) / b),
                             Pos2::new(x2, (d - a * x2) / b),
                             Pos2::new((d - b * y1) / a, y1),
                             Pos2::new((d - b * y2) / a, y2),
@@ -228,9 +228,7 @@ impl DockViewer {
 
                         let mut iter = points.into_iter().filter(|x| rect.contains(*x));
 
-                        let mut array = || {
-                            Some([iter.next()?, iter.next()?])
-                        };
+                        let mut array = || Some([iter.next()?, iter.next()?]);
 
                         if let Some([a, b]) = array() {
                             shapes.push(Shape::line_segment(
@@ -238,7 +236,7 @@ impl DockViewer {
                                 Stroke::new(3.0, Color32::DARK_GRAY),
                             ));
                         }
-                    },
+                    }
                     ConstraintWidget::Pulley(a, b, anchor_a, anchor_b) => {
                         let pos_a = to_screen_coordinates(self.snapshot.pos[*a]);
                         let pos_b = to_screen_coordinates(self.snapshot.pos[*b]);
@@ -288,8 +286,14 @@ impl DockViewer {
     }
 
     fn display_stats(&self, ui: &mut Ui) {
-        ui.label(format!("Violation mean: {}", -self.snapshot.violation_mean.log10()));
-        ui.label(format!("time taken to solve: {:?}", self.snapshot.calculation_time));
+        ui.label(format!(
+            "Violation mean: {}",
+            -self.snapshot.violation_mean.log10()
+        ));
+        ui.label(format!(
+            "time taken to solve: {:?}",
+            self.snapshot.calculation_time
+        ));
     }
 }
 

@@ -1,11 +1,14 @@
-pub mod constraints;
 mod components;
+pub mod constraints;
 
-use std::time::{Duration, Instant};
+use crate::world::components::{Acceleration, Mass, Position, SubjectToPhysic, Velocity};
+use crate::world::constraints::{
+    AnchorConstraint, Constraint, ConstraintWidget, DistanceConstraint, PlaneConstraint,
+    PulleyConstraint,
+};
 use hecs::{Entity, World};
 use nalgebra::{DMatrix, DVector, Vector2};
-use crate::world::components::{Acceleration, Mass, Position, SubjectToPhysic, Velocity};
-use crate::world::constraints::{AnchorConstraint, Constraint, ConstraintWidget, DistanceConstraint, PlaneConstraint, PulleyConstraint};
+use std::time::{Duration, Instant};
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Solver {
     FirstOrder,
@@ -66,7 +69,7 @@ impl GameContent {
 
     pub fn add_body(&mut self, pos: Vector2<f32>, velocity: Vector2<f32>, mass: f32) -> Entity {
         self.world.spawn((
-            Position{
+            Position {
                 actual: pos,
                 last_tick: pos - velocity * self.time_step,
             },
@@ -93,7 +96,6 @@ impl GameContent {
             anchor: Vector2::new(0.0, 0.0),
             distance: 1.0,
         });
-
     }
 
     pub fn double(&mut self) {
@@ -141,7 +143,11 @@ impl GameContent {
         self.gravity = Vector2::new(0.0, -9.81);
         let mut last_body = None;
         for i in 0..20 {
-            let body = self.add_body(Vector2::new(i as f32 * 0.25 - 5.0, 0.0), Vector2::new(0.0, 4.0), 0.1);
+            let body = self.add_body(
+                Vector2::new(i as f32 * 0.25 - 5.0, 0.0),
+                Vector2::new(0.0, 4.0),
+                0.1,
+            );
             if let Some(last_body) = last_body {
                 self.add_constraint(DistanceConstraint {
                     body_a: last_body,
@@ -171,9 +177,17 @@ impl GameContent {
             distance: 2.0,
         });
         let body3 = self.add_body(Vector2::new(0.0, 1.0), Vector2::new(0.0, 0.0), 1.0);
-        self.add_constraint(PlaneConstraint::new(body1, Vector2::new(1.0, 1.0), Vector2::new(-1.0, 1.0)));
-        self.add_constraint(PlaneConstraint::new(body2, Vector2::new(-1.0, 1.0), Vector2::new(1.0, 1.0)));
-        self.add_constraint(DistanceConstraint{
+        self.add_constraint(PlaneConstraint::new(
+            body1,
+            Vector2::new(1.0, 1.0),
+            Vector2::new(-1.0, 1.0),
+        ));
+        self.add_constraint(PlaneConstraint::new(
+            body2,
+            Vector2::new(-1.0, 1.0),
+            Vector2::new(1.0, 1.0),
+        ));
+        self.add_constraint(DistanceConstraint {
             body_a: body1,
             body_b: body3,
             distance: 1.0,
@@ -188,32 +202,32 @@ impl GameContent {
         let b3 = self.add_body(Vector2::new(1.5, 0.0), Vector2::new(0.0, 0.0), 1.0);
         let b4 = self.add_body(Vector2::new(1.25, -0.25), Vector2::new(0.0, 0.0), 1.0);
         let r2 = 2.0f32.sqrt() * 0.25;
-        self.add_constraint(AnchorConstraint{
+        self.add_constraint(AnchorConstraint {
             body: b2,
             anchor: Vector2::new(0.0, 0.5),
             distance: r2,
         });
-        self.add_constraint(DistanceConstraint{
+        self.add_constraint(DistanceConstraint {
             body_a: b1,
             body_b: b2,
             distance: r2,
         });
-        self.add_constraint(DistanceConstraint{
+        self.add_constraint(DistanceConstraint {
             body_a: b2,
             body_b: b3,
             distance: r2,
         });
-        self.add_constraint(DistanceConstraint{
+        self.add_constraint(DistanceConstraint {
             body_a: b3,
             body_b: b4,
             distance: r2,
         });
-        self.add_constraint(DistanceConstraint{
+        self.add_constraint(DistanceConstraint {
             body_a: b4,
             body_b: b1,
             distance: r2,
         });
-        self.add_constraint(DistanceConstraint{
+        self.add_constraint(DistanceConstraint {
             body_a: b1,
             body_b: b3,
             distance: 1.0,
@@ -239,7 +253,11 @@ impl GameContent {
         self.gravity = Vector2::new(0.0, -9.8);
         let b1 = self.add_body(Vector2::new(-5.0, 0.0), Vector2::new(0.0, 0.0), 1.0);
         let b2 = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(5.0, 0.0), 2.0);
-        self.add_constraint(PlaneConstraint::new(b1, Vector2::new(0.0, 1.0), Vector2::new(0.0, 0.0)));
+        self.add_constraint(PlaneConstraint::new(
+            b1,
+            Vector2::new(0.0, 1.0),
+            Vector2::new(0.0, 0.0),
+        ));
         self.add_constraint(PulleyConstraint {
             body_a: b1,
             body_b: b2,
@@ -262,14 +280,18 @@ impl GameContent {
             self.constraints.push(Box::new(a));
         };
 
-        if entities.len() < 2 { return; };
+        if entities.len() < 2 {
+            return;
+        };
         add_constraint(DistanceConstraint {
             body_a: entities[0],
             body_b: entities[1],
             distance: distance(entities[0], entities[1]),
         });
         for trio in entities.windows(3) {
-            let (duo, [a]) = trio.split_at(2) else { return; };
+            let (duo, [a]) = trio.split_at(2) else {
+                return;
+            };
             for b in duo {
                 add_constraint(DistanceConstraint {
                     body_a: *a,
@@ -298,18 +320,18 @@ impl GameContent {
             self.add_body(Vector2::new(1.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
         ];
         let load = self.add_body(Vector2::new(0.0, 1.0), Vector2::new(0.01, 0.0), 10.0);
-        self.add_constraint(DistanceConstraint{
+        self.add_constraint(DistanceConstraint {
             body_a: bodies[5],
             body_b: load,
             distance: 1.0,
         });
         self.add_triangle_strip(&bodies);
-        self.add_constraint(AnchorConstraint{
+        self.add_constraint(AnchorConstraint {
             body: bodies[0],
             anchor: Vector2::new(-1.5, 1.0),
             distance: 1.0,
         });
-        self.add_constraint(AnchorConstraint{
+        self.add_constraint(AnchorConstraint {
             body: bodies[11],
             anchor: Vector2::new(1.5, 1.0),
             distance: 1.0,
@@ -318,7 +340,10 @@ impl GameContent {
 
     /// update all indices for all the bodies... this theoretically be lazy, but exact solver are slow anyway
     fn update_solver_index(&mut self) {
-        let mut query = self.world.query::<&mut SubjectToPhysic>().with::<(&Position, &Velocity, &Mass)>();
+        let mut query = self
+            .world
+            .query::<&mut SubjectToPhysic>()
+            .with::<(&Position, &Velocity, &Mass)>();
         let iter = query.into_iter();
         self.physic_index_to_entity.clear();
         self.physic_index_to_entity.reserve(iter.len());
@@ -334,7 +359,13 @@ impl GameContent {
         let mut query = self.world.query::<&Velocity>();
         let view = query.view();
         let size = self.physic_index_to_entity.len() * 2;
-        DVector::from_iterator(size, self.physic_index_to_entity.iter().cloned().flat_map(|e| view.get(e).unwrap().as_slice().iter().cloned()))
+        DVector::from_iterator(
+            size,
+            self.physic_index_to_entity
+                .iter()
+                .cloned()
+                .flat_map(|e| view.get(e).unwrap().as_slice().iter().cloned()),
+        )
     }
 
     fn j_matrix(&self) -> DMatrix<f32> {
@@ -358,13 +389,13 @@ impl GameContent {
             let mass = view.get(e).unwrap();
             [mass.inv_mass, mass.inv_mass].into_iter()
         });
-        DMatrix::from_fn(size, size, |i, j| {
-            if i == j {
-                iter.next().unwrap()
-            } else {
-                0.0
-            }
-        })
+        DMatrix::from_fn(
+            size,
+            size,
+            |i, j| {
+                if i == j { iter.next().unwrap() } else { 0.0 }
+            },
+        )
     }
 
     fn force_vector(&self) -> DVector<f32> {
@@ -382,24 +413,37 @@ impl GameContent {
     fn j_dot_q_dot(&self) -> DVector<f32> {
         let mut query = self.world.query::<(&Position, &Velocity)>();
         let view = query.view();
-        DVector::from_iterator(self.constraints.len(), self.constraints.iter().map(|c| c.compute_j_dot_q_dot(&view)))
+        DVector::from_iterator(
+            self.constraints.len(),
+            self.constraints
+                .iter()
+                .map(|c| c.compute_j_dot_q_dot(&view)),
+        )
     }
 
     fn compute_ddot_q_dot_plus_j_dot_q_ddot(&self) -> DVector<f32> {
-        for (_, (mass, acceleration)) in self.world.query::<(&Mass,&mut Acceleration)>().iter() {
+        for (_, (mass, acceleration)) in self.world.query::<(&Mass, &mut Acceleration)>().iter() {
             acceleration.0 = Vector2::new(0.0, -9.81) * mass.mass;
         }
 
         let mut query = self.world.query::<(&Position, &Velocity, &Acceleration)>();
         let view = query.view();
-        DVector::from_iterator(self.constraints.len(), self.constraints.iter().map(|c| c.compute_ddot_q_dot_plus_j_dot_q_ddot(&view)))
+        DVector::from_iterator(
+            self.constraints.len(),
+            self.constraints
+                .iter()
+                .map(|c| c.compute_ddot_q_dot_plus_j_dot_q_ddot(&view)),
+        )
     }
 
     fn c_dot_vector(&mut self) -> DVector<f32> {
         let mut query = self.world.query::<(&Position, &Velocity)>();
         let view = query.view();
         let len = self.constraints.len();
-        DVector::from_iterator(len, self.constraints.iter().map(|c| c.evaluate_c_dot(&view)))
+        DVector::from_iterator(
+            len,
+            self.constraints.iter().map(|c| c.evaluate_c_dot(&view)),
+        )
     }
 
     fn c_vector(&mut self) -> DVector<f32> {
@@ -407,34 +451,41 @@ impl GameContent {
         let view = query.view();
         let mut acc = 0.0;
         let len = self.constraints.len();
-        let vec = DVector::from_iterator(len, self.constraints.iter().map(|c| {
-            let c = c.evaluate_c(&view);
-            acc += c.abs();
-            c
-        }));
+        let vec = DVector::from_iterator(
+            len,
+            self.constraints.iter().map(|c| {
+                let c = c.evaluate_c(&view);
+                acc += c.abs();
+                c
+            }),
+        );
         self.violation_mean = acc / len as f32;
         vec
     }
 
     pub fn take_snapshot(&mut self) -> WorldSnapshot {
         let mut query = self.world.query::<(&Position, &Velocity, &Mass)>();
-        let (kinetic_energy, potential_energy) = query.into_iter().map(|(_,(pos, velocity, mass))| {
-            let kinetic_energy = 0.5 * (1.0 / mass.inv_mass) * velocity.norm_squared();
-            let potential_energy = -mass.mass * self.gravity.dot(pos);
-            (kinetic_energy, potential_energy)
-        }).fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
+        let (kinetic_energy, potential_energy) = query
+            .into_iter()
+            .map(|(_, (pos, velocity, mass))| {
+                let kinetic_energy = 0.5 * (1.0 / mass.inv_mass) * velocity.norm_squared();
+                let potential_energy = -mass.mass * self.gravity.dot(pos);
+                (kinetic_energy, potential_energy)
+            })
+            .fold((0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
 
         let mut query = self.world.query::<&Position>();
         let view = query.view();
-        let pos = self.physic_index_to_entity.iter().cloned().map(|e| {
-            view.get(e).unwrap().actual
-        }).collect::<Vec<_>>();
+        let pos = self
+            .physic_index_to_entity
+            .iter()
+            .cloned()
+            .map(|e| view.get(e).unwrap().actual)
+            .collect::<Vec<_>>();
 
         let mut query = self.world.query::<&SubjectToPhysic>();
         let view = query.view();
-        let convertor = |e: Entity| {
-            view.get(e).unwrap().0
-        };
+        let convertor = |e: Entity| view.get(e).unwrap().0;
 
         let widget_iter = self.constraints.iter().map(|c| c.widget(&convertor));
         let force_iter = self.applied_correction.iter().cloned();
@@ -488,13 +539,18 @@ impl GameContent {
         let c = self.c_vector();
 
         let cholesky = k.cholesky().unwrap();
-        let b = -j * q_dot - (0.0/self.time_step) * c;
+        let b = -j * q_dot - (0.0 / self.time_step) * c;
         let lambda = cholesky.solve(&b);
         self.applied_correction = &lambda / self.time_step;
         let applied_momentum = jt * &lambda;
 
         // correct the velocity
-        for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
             let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
             velocity.0 += momentum * mass.inv_mass;
             pos.actual += velocity.0 * self.time_step;
@@ -515,16 +571,26 @@ impl GameContent {
         let c = self.c_vector();
 
         let cholesky = k.cholesky().unwrap();
-        let b = - j_w_q2dot - j_dot_q_dot - (0.0/self.time_step) * c_dot - (0.0/(self.time_step * self.time_step)) * c;
+        let b = -j_w_q2dot
+            - j_dot_q_dot
+            - (0.0 / self.time_step) * c_dot
+            - (0.0 / (self.time_step * self.time_step)) * c;
         let lambda = cholesky.solve(&b);
         let applied_force = (jt * &lambda) + force;
         self.applied_correction = lambda; // this solver is working with force, so we got what we want
 
         //integrate velocity and position
-        for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
-            let acceleration = Vector2::new(applied_force[i * 2], applied_force[i * 2 + 1]) * mass.inv_mass;
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
+            let acceleration =
+                Vector2::new(applied_force[i * 2], applied_force[i * 2 + 1]) * mass.inv_mass;
             velocity.0 += acceleration * self.time_step;
-            pos.actual += velocity.0 * self.time_step + 0.5 * self.time_step * self.time_step * acceleration;
+            pos.actual +=
+                velocity.0 * self.time_step + 0.5 * self.time_step * self.time_step * acceleration;
             // verlet integration is in appropriate here since approximation on the velocity vector is too dirty
         }
     }
@@ -546,13 +612,23 @@ impl GameContent {
         let j_dot_q_dot = self.j_dot_q_dot();
         let c_dot = self.c_dot_vector();
         let c = self.c_vector();
-        let b = - j_w_q2dot - j_dot_q_dot - (0.0/self.time_step) * c_dot - (0.0/(self.time_step * self.time_step)) * &c;
+        let b = -j_w_q2dot
+            - j_dot_q_dot
+            - (0.0 / self.time_step) * c_dot
+            - (0.0 / (self.time_step * self.time_step)) * &c;
         let lambda = &inv_k * b;
         let applied_acceleration = (&jt * &lambda) + force;
 
         // velocity pass
-        for (i, (_, (velocity, mass))) in self.world.query::<(&mut Velocity, &Mass)>().iter().enumerate() {
-            let acceleration = Vector2::new(applied_acceleration[i * 2], applied_acceleration[i * 2 + 1]) * mass.inv_mass;
+        for (i, (_, (velocity, mass))) in self
+            .world
+            .query::<(&mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
+            let acceleration =
+                Vector2::new(applied_acceleration[i * 2], applied_acceleration[i * 2 + 1])
+                    * mass.inv_mass;
             // euler integration
             velocity.0 += acceleration * self.time_step;
         }
@@ -560,23 +636,30 @@ impl GameContent {
         // this velocity vector tends to violate the constraints
         let q_dot = self.q_dot_vector();
 
-        let b = -j * q_dot - (0.0/self.time_step) * c;
+        let b = -j * q_dot - (0.0 / self.time_step) * c;
         let lambda = inv_k * b;
         let applied_momentum = jt * &lambda;
 
         // correct the velocity and integrate position
-        for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
             //let acceleration = Vector2::new(applied_acceleration[i * 2], applied_acceleration[i * 2 + 1]) * body.inv_mass;
             let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
             velocity.0 += momentum * mass.inv_mass;
-            let acceleration = Vector2::new(applied_acceleration[i * 2], applied_acceleration[i * 2 + 1]) * mass.inv_mass;
+            let acceleration =
+                Vector2::new(applied_acceleration[i * 2], applied_acceleration[i * 2 + 1])
+                    * mass.inv_mass;
             // euler integration
-            pos.actual += velocity.0 * self.time_step + 0.5 * acceleration * self.time_step * self.time_step;
+            pos.actual +=
+                velocity.0 * self.time_step + 0.5 * acceleration * self.time_step * self.time_step;
             // I don't have any clue why 2nd order taylor expansion is **less** accurate than 1st order here
             // maybe because the 1st order solver already provide a better approximation of the velocity
         }
     }
-
 
     /// this new attempt change when order are applied
     /// the "quality" of the solver can be measured by "how much the c constraint is far from 0"
@@ -603,11 +686,16 @@ impl GameContent {
         // first, make velocity valid in this position
         let q_dot = self.q_dot_vector();
 
-        let b = -&j * q_dot - (0.0/self.time_step) * &c; //no Baumgarte for now
+        let b = -&j * q_dot - (0.0 / self.time_step) * &c; //no Baumgarte for now
         let lambda = &inv_k * b;
         let applied_momentum = &jt * &lambda;
 
-        for (i, (_, (velocity, mass))) in self.world.query::<(&mut Velocity, &Mass)>().iter().enumerate() {
+        for (i, (_, (velocity, mass))) in self
+            .world
+            .query::<(&mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
             let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
             velocity.0 += momentum * mass.inv_mass;
         }
@@ -617,17 +705,27 @@ impl GameContent {
         let j_dot_q_dot = self.j_dot_q_dot();
         let c_dot = self.c_dot_vector();
 
-        let b = - j_w_q2dot - j_dot_q_dot - (0.0/self.time_step) * c_dot - (0.0/(self.time_step * self.time_step)) * c;
+        let b = -j_w_q2dot
+            - j_dot_q_dot
+            - (0.0 / self.time_step) * c_dot
+            - (0.0 / (self.time_step * self.time_step)) * c;
         let lambda = inv_k * b;
         let applied_force = (jt * &lambda) + force;
 
         //integrate velocity and position
-        for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
-            let acceleration = Vector2::new(applied_force[i * 2], applied_force[i * 2 + 1]) * mass.inv_mass;
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
+            let acceleration =
+                Vector2::new(applied_force[i * 2], applied_force[i * 2 + 1]) * mass.inv_mass;
             let temp = pos.actual;
             let old_pos = pos.last_tick;
             //Verlet integration
-            pos.actual = pos.actual + pos.actual - pos.last_tick + acceleration * self.time_step * self.time_step;
+            pos.actual = pos.actual + pos.actual - pos.last_tick
+                + acceleration * self.time_step * self.time_step;
             pos.last_tick = temp;
             velocity.0 = (pos.actual - old_pos) / (2.0 * self.time_step);
         }
@@ -669,7 +767,12 @@ impl GameContent {
         let applied_momentum = jt * &lambda;
 
         // correct the velocity
-        for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
             let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
             velocity.0 += momentum * mass.inv_mass;
             pos.actual += velocity.0 * self.time_step;
@@ -745,13 +848,20 @@ impl GameContent {
         let scary_thing = self.compute_ddot_q_dot_plus_j_dot_q_ddot();
         let cholesky = k.cholesky().unwrap();
 
-        let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5 - (1.0/6.0) * self.time_step * self.time_step * scary_thing;
+        let b = -j * q_dot
+            - j_dot_q_dot * self.time_step * 0.5
+            - (1.0 / 6.0) * self.time_step * self.time_step * scary_thing;
         let lambda = cholesky.solve(&b);
         self.applied_correction = &lambda / self.time_step;
         let applied_momentum = jt * &lambda;
 
         // correct the velocity
-        for (i, (_, (pos, velocity, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
             let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
             velocity.0 += momentum * mass.inv_mass;
             pos.actual += velocity.0 * self.time_step;

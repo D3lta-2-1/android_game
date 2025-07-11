@@ -1,5 +1,5 @@
-use std::ops::{Deref, DerefMut};
 use nalgebra::Vector2;
+use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Position {
