@@ -287,7 +287,7 @@ impl DockViewer {
 
     fn display_stats(&self, ui: &mut Ui) {
         ui.label(format!(
-            "Violation mean: {}",
+            "precision factor: {}",
             -self.snapshot.violation_mean.log10()
         ));
         ui.label(format!(
