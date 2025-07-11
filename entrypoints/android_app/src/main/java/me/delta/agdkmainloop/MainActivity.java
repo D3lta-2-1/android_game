@@ -1,18 +1,12 @@
 package me.delta.agdkmainloop;
 
-
 import androidx.annotation.RequiresApi;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
-import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
-import android.os.VibratorManager;
-import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import com.google.androidgamesdk.GameActivity;

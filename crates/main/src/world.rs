@@ -20,10 +20,11 @@ pub enum Solver {
     HybridV4,
     Pbd,
     HybridV3Pbd,
+    FirstOrderSoft,
 }
 
 impl Solver {
-    pub const LIST: [Solver; 9] = [
+    pub const LIST: [Solver; 10] = [
         Solver::FirstOrder,
         Solver::SecondOrder,
         Solver::FirstOrderWithPrepass,
@@ -33,6 +34,7 @@ impl Solver {
         Solver::HybridV4,
         Solver::Pbd,
         Solver::HybridV3Pbd,
+        Solver::FirstOrderSoft,
     ];
 }
 pub struct GameContent {
@@ -332,6 +334,11 @@ impl GameContent {
         self.add_triangle_strip(&bodies);
         self.add_constraint(AnchorConstraint {
             body: bodies[0],
+            anchor: Vector2::new(-2.0, 0.0),
+            distance: 0.5,
+        });
+        self.add_constraint(AnchorConstraint {
+            body: bodies[0],
             anchor: Vector2::new(-1.5, 1.0),
             distance: 1.0,
         });
@@ -514,21 +521,22 @@ impl GameContent {
         }
         let begin = Instant::now();
         match self.solver {
-            Solver::FirstOrder => self.solve_1st_order(),
-            Solver::SecondOrder => self.solve_2nd_order(),
-            Solver::FirstOrderWithPrepass => self.solve_with_prepass(),
+            Solver::FirstOrder => self.first_order(),
+            Solver::SecondOrder => self.second_order(),
+            Solver::FirstOrderWithPrepass => self.first_order_with_prepass(),
             Solver::HybridV2 => self.hybrid_v2(),
             Solver::HybridV3 => self.hybrid_v3(),
             Solver::HybridV3cgm => self.hydrid_v3_cgm(),
             Solver::HybridV4 => self.hybrid_v4(),
             Solver::Pbd => self.pdb(),
             Solver::HybridV3Pbd => self.hybrid_v3_pbd(),
+            Solver::FirstOrderSoft => self.first_order_soft(),
         }
         self.calculation_time = begin.elapsed();
     }
 
-    /// this solver is fine most of the time, but fail we enter a "too wrong" state, mainly where acceleration is too high and needs to be damped
-    fn solve_1st_order(&mut self) {
+    /// this solver is fine most of the time, but fail we enter a "too wrong" state, mainly where acceleration is too high and needs to be damped, at least that was my theory back then
+    fn first_order(&mut self) {
         let inv_mass_matrix = self.inv_mass_matrix();
         let j = self.j_matrix();
         let jt = j.transpose();
@@ -564,7 +572,7 @@ impl GameContent {
     }
 
     /// this solver tends handle a bit better the case but is unable to maintain high rigidity such as the first order solver
-    fn solve_2nd_order(&mut self) {
+    fn second_order(&mut self) {
         // Here we are solving for JWJt * lambda = -J * M^-1 * F - J_dot_q_dot as described by Andrew Witkin
         let inv_mass_matrix = self.inv_mass_matrix();
         let j = self.j_matrix();
@@ -602,7 +610,7 @@ impl GameContent {
     }
 
     /// So, new guess, I'll preprocess applied forces via a second order solver, and then use the first order solver to correct the velocity and apply Baumgarte stabilization
-    fn solve_with_prepass(&mut self) {
+    fn first_order_with_prepass(&mut self) {
         // both solvers work in a similar way, and can share a lot of calculations
         // the most expensive is by far the inversion of the K matrix, which is luckily common to both
         let inv_mass_matrix = self.inv_mass_matrix();
@@ -956,6 +964,50 @@ impl GameContent {
         }
         self.c_vector();
     }
+
+    fn first_order_soft(&mut self) {
+        let omega = 15.0f32 * 2.0 * std::f32::consts::TAU; // this is the "frequency" in radians per second,
+        let zeta = 0.0f32; // this is the "damping" of the constraint, inverse of the number of oscillations, if set to 0, we find an harmonic oscillator, if set to 1, we find a critically damped system, if set to 2, we find an over damped system
+
+        let inv_mass_matrix = self.inv_mass_matrix();
+        let j = self.j_matrix();
+        let jt = j.transpose();
+        let m_eff = &j * &inv_mass_matrix * &jt;
+        let c = 2.0 * zeta * omega * &m_eff;
+        let k_stiffness = omega * omega * &m_eff; // stiffness of the constraint, this is the "spring constant" of the constraint, 1.0 is a good value, but can be tuned
+        let gamma = (c + self.time_step * &k_stiffness).try_inverse().unwrap();
+        let beta = self.time_step * &gamma * k_stiffness;
+
+        let k = m_eff + gamma; // add a little bit of stiffness to the system, so it doesn't collapse
+
+        for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
+            // euler integration
+            velocity.0 += self.gravity * self.time_step;
+        }
+
+        // this velocity vector tends to violate the constraints
+        let q_dot = self.q_dot_vector();
+        let c = self.c_vector();
+
+        let cholesky = k.cholesky().unwrap();
+        let b = -j * q_dot - (beta / self.time_step) * c;
+        let lambda = cholesky.solve(&b);
+        self.applied_correction = &lambda / self.time_step;
+        let applied_momentum = jt * &lambda;
+
+        // correct the velocity
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
+            let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
+            velocity.0 += momentum * mass.inv_mass;
+            pos.actual += velocity.0 * self.time_step;
+        }
+    }
+
 }
 
 #[derive(Default)]
