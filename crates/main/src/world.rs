@@ -17,16 +17,20 @@ pub enum Solver {
     HybridV2,
     HybridV3,
     HybridV4,
+    Pbd,
+    HybridV3Pbd,
 }
 
 impl Solver {
-    pub const LIST: [Solver; 6] = [
+    pub const LIST: [Solver; 8] = [
         Solver::FirstOrder,
         Solver::SecondOrder,
         Solver::FirstOrderWithPrepass,
         Solver::HybridV2,
         Solver::HybridV3,
         Solver::HybridV4,
+        Solver::Pbd,
+        Solver::HybridV3Pbd,
     ];
 }
 pub struct GameContent {
@@ -203,7 +207,7 @@ impl GameContent {
         self.add_constraint(AnchorConstraint {
             body: b2,
             anchor: Vector2::new(0.0, 0.5),
-            distance: r2,
+            distance: (Vector2::new(1.0f32, 0.0) - Vector2::new(0.0, 0.5)).norm(),
         });
         self.add_constraint(DistanceConstraint {
             body_a: b1,
@@ -513,6 +517,8 @@ impl GameContent {
             Solver::HybridV2 => self.hybrid_v2(),
             Solver::HybridV3 => self.hybrid_v3(),
             Solver::HybridV4 => self.hybrid_v4(),
+            Solver::Pbd => self.pdb(),
+            Solver::HybridV3Pbd => self.hybrid_v3_pbd(),
         }
         self.calculation_time = begin.elapsed();
     }
@@ -813,6 +819,87 @@ impl GameContent {
         }
 
         let _c = self.c_vector();
+    }
+
+    fn pdb(&mut self) {
+        // first step, Verlet integration
+        for (_, pos) in self.world.query::<&mut Position>().iter() {
+            // euler integration
+            let new_pos = 2.0 * pos.actual - pos.last_tick + self.gravity * (self.time_step * self.time_step);
+            pos.last_tick = pos.actual;
+            pos.actual = new_pos;
+        }
+        // only first order correction
+        let inv_mass_matrix = self.inv_mass_matrix();
+        let j = self.j_matrix();
+        let jt = j.transpose();
+        let k = &j * &inv_mass_matrix * &jt;
+        let cholesky = k.cholesky().unwrap();
+        let b = -self.c_vector();
+        let lambda = cholesky.solve(&b);
+        self.applied_correction = &lambda / (self.time_step * self.time_step);
+        let applied_integrated_momentum = jt * &lambda;
+
+        for (i, (_, (pos, vel, mass))) in self.world.query::<(&mut Position, &mut Velocity, &Mass)>().iter().enumerate() {
+            let integrated_momentum = Vector2::new(applied_integrated_momentum[i * 2], applied_integrated_momentum[i * 2 + 1]);
+            pos.actual += integrated_momentum * mass.inv_mass;
+            vel.0 = (pos.last_tick - pos.actual) / self.time_step;
+        }
+        self.c_vector();
+    }
+
+    fn hybrid_v3_pbd(&mut self) {
+        let inv_mass_matrix = self.inv_mass_matrix();
+        let j = self.j_matrix();
+        let jt = j.transpose();
+        let k = &j * &inv_mass_matrix * &jt;
+
+        for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
+            // euler integration
+            velocity.0 += self.gravity * self.time_step;
+        }
+
+        // this velocity vector tends to violate the constraints
+        let q_dot = self.q_dot_vector();
+        let j_dot_q_dot = self.j_dot_q_dot();
+
+        let _c = self.c_vector();
+
+        let cholesky = k.cholesky().unwrap();
+        let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5;
+        let lambda = cholesky.solve(&b);
+
+        self.applied_correction = &lambda / self.time_step; //since we are working with momentum, we need to divide by the time step to get the applied force
+
+        let applied_momentum = jt * &lambda;
+
+        // correct the velocity
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
+            let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
+            velocity.0 += momentum * mass.inv_mass;
+            pos.actual += velocity.0 * self.time_step;
+        }
+
+        let inv_mass_matrix = self.inv_mass_matrix();
+        let j = self.j_matrix();
+        let jt = j.transpose();
+        let k = &j * &inv_mass_matrix * &jt;
+        let cholesky = k.cholesky().unwrap();
+        let b = -self.c_vector();
+        let lambda = cholesky.solve(&b);
+        self.applied_correction += &lambda / (self.time_step * self.time_step);
+        let applied_integrated_momentum = jt * &lambda;
+
+        for (i, (_, (pos, mass))) in self.world.query::<(&mut Position, &Mass)>().iter().enumerate() {
+            let integrated_momentum = Vector2::new(applied_integrated_momentum[i * 2], applied_integrated_momentum[i * 2 + 1]);
+            pos.actual += integrated_momentum * mass.inv_mass;
+        }
+        self.c_vector();
     }
 }
 
