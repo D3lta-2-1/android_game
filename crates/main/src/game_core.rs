@@ -2,7 +2,7 @@ use crate::logic_hook::{GameContext, GameLoop, SynchronousLoop};
 use crate::world::constraints::ConstraintWidget;
 use crate::world::{GameContent, Solver, WorldSnapshot};
 use egui::{Color32, Frame, Pos2, Shape, Stroke, Ui, WidgetText, vec2};
-use egui_dock::TabViewer;
+use egui_dock::{NodeIndex, TabViewer};
 use egui_plot::{Legend, Line, Plot, PlotPoint};
 use nalgebra::Vector2;
 use running_context::event_handling::EguiGuiExtendContext;
@@ -46,10 +46,11 @@ enum SimulationContent {
     Pulley,
     PulleyAndRail,
     Bridge,
+    BridgeSoft,
 }
 
 impl SimulationContent {
-    const LIST: [SimulationContent; 9] = [
+    const LIST: [SimulationContent; 10] = [
         SimulationContent::Simple,
         SimulationContent::Double,
         SimulationContent::Triple,
@@ -59,6 +60,7 @@ impl SimulationContent {
         SimulationContent::Pulley,
         SimulationContent::PulleyAndRail,
         SimulationContent::Bridge,
+        SimulationContent::BridgeSoft,
     ];
 }
 
@@ -69,6 +71,16 @@ pub struct Gui {
 }
 
 impl Gui {
+
+    fn default_view() -> egui_dock::DockState<Tab> {
+        let mut tree = egui_dock::DockState::new(vec![Tab::World]);
+        let main_surface = tree.main_surface_mut();
+        let [_, a] = main_surface.split_right(NodeIndex::root(), 0.5, vec![Tab::Button]);
+        main_surface.split_right(a, 0.5, vec![Tab::Stats]);
+        main_surface.split_below(a, 0.5, vec![Tab::Plots]);
+        tree
+    }
+
     fn new(receiver: Receiver<WorldSnapshot>, event_sender: Sender<Event>) -> Self {
         Self {
             graphic_receiver: receiver,
@@ -77,12 +89,14 @@ impl Gui {
                 sender: event_sender,
                 kinetic_energy: vec![],
                 potential_energy: vec![],
+                elastic_energy: vec![],
                 mechanical_energy: vec![],
+                precision_factor: vec![],
                 selected_simulation: SimulationContent::Double,
                 selected_solver: Solver::HybridV3,
                 should_clear_graph: false,
             },
-            tree: egui_dock::DockState::new(vec![Tab::World, Tab::Button, Tab::Plots, Tab::Stats]),
+            tree: Self::default_view() //egui_dock::DockState::new(vec![Tab::World, Tab::Button, Tab::Plots, Tab::Stats]).,
         }
     }
 }
@@ -92,7 +106,9 @@ struct DockViewer {
     sender: Sender<Event>,
     kinetic_energy: Vec<PlotPoint>,
     potential_energy: Vec<PlotPoint>,
+    elastic_energy: Vec<PlotPoint>,
     mechanical_energy: Vec<PlotPoint>,
+    precision_factor: Vec<PlotPoint>,
     selected_simulation: SimulationContent,
     selected_solver: Solver,
     should_clear_graph: bool,
@@ -163,6 +179,9 @@ impl DockViewer {
                 })
                 .unwrap();
         }
+        ui.label("- soft simulations are only soft if the solver supports it, otherwise they are rigid");
+        ui.label("- precision factor is the number of zero after the decimal point in the mean violation of the constraints, it doesn't have any mean if the simulation have soft parts. It's a good indicator of the precision of the simulation, the higher the better.");
+        ui.label("- the mechanical energy is the sum of the kinetic, potential and elastic energy, it should be constant in a perfect simulation.");
     }
 
     fn draw_simulation(&self, ui: &mut Ui) {
@@ -272,7 +291,6 @@ impl DockViewer {
 
         if self.should_clear_graph {
             plot = plot.reset();
-            self.should_clear_graph = false;
         }
 
         plot.show(ui, |plot_ui| {
@@ -282,27 +300,43 @@ impl DockViewer {
             plot_ui.line(kinetic);
             plot_ui.line(potential);
             plot_ui.line(mechanical);
+
+            if self.elastic_energy.is_empty() {
+                return;
+            }
+
+            let elastic = Line::new(self.elastic_energy.as_ref()).name("Elastic Energy");
+            plot_ui.line(elastic);
         });
     }
 
     fn display_stats(&self, ui: &mut Ui) {
         ui.label(format!(
-            "precision factor: {}",
-            -self.snapshot.violation_mean.log10()
-        ));
-        ui.label(format!(
             "time taken to solve: {:?}",
             self.snapshot.calculation_time
         ));
+
+        let mut plot = Plot::new("precision over time").legend(Legend::default());
+
+        if self.should_clear_graph {
+            plot = plot.reset();
+        }
+        plot.show(ui, |plot_ui| {
+            let precision = Line::new(self.precision_factor.as_ref()).name("Mean Precision (number of zero after the decimal point)");
+            plot_ui.line(precision);
+        });
     }
 }
 
 impl SynchronousLoop for Gui {
     fn update_gui(&mut self, ctx: &mut EguiGuiExtendContext) {
+        self.dock_viewer.should_clear_graph = false;
         if self.dock_viewer.kinetic_energy.len() > 8000 {
             self.dock_viewer.kinetic_energy.clear();
             self.dock_viewer.potential_energy.clear();
+            self.dock_viewer.elastic_energy.clear();
             self.dock_viewer.mechanical_energy.clear();
+            self.dock_viewer.precision_factor.clear();
         }
 
         for latest in self.graphic_receiver.try_iter() {
@@ -310,10 +344,14 @@ impl SynchronousLoop for Gui {
             let time = self.dock_viewer.snapshot.date as f64;
             let kinetic_energy = self.dock_viewer.snapshot.kinetic_energy as f64;
             let potential_energy = self.dock_viewer.snapshot.potential_energy as f64;
+            let elastic_energy = self.dock_viewer.snapshot.elastic_energy as f64;
+            let precision_factor = f32::min(-self.dock_viewer.snapshot.violation_mean.log10(), 7.0) as f64;
             if time < self.dock_viewer.kinetic_energy.last().map_or(0.0, |p| p.x) {
                 self.dock_viewer.kinetic_energy.clear();
                 self.dock_viewer.potential_energy.clear();
+                self.dock_viewer.elastic_energy.clear();
                 self.dock_viewer.mechanical_energy.clear();
+                self.dock_viewer.precision_factor.clear();
                 self.dock_viewer.should_clear_graph = true;
             }
             self.dock_viewer
@@ -322,9 +360,17 @@ impl SynchronousLoop for Gui {
             self.dock_viewer
                 .potential_energy
                 .push(PlotPoint::new(time, potential_energy));
+            if !self.dock_viewer.elastic_energy.is_empty() || elastic_energy != 0.0 {
+                self.dock_viewer
+                    .elastic_energy
+                    .push(PlotPoint::new(time, elastic_energy));
+            }
             self.dock_viewer
                 .mechanical_energy
-                .push(PlotPoint::new(time, kinetic_energy + potential_energy));
+                .push(PlotPoint::new(time, kinetic_energy + potential_energy + elastic_energy));
+            self.dock_viewer
+                .precision_factor
+                .push(PlotPoint::new(time, precision_factor));
         }
 
         egui_dock::DockArea::new(&mut self.tree)
@@ -369,6 +415,7 @@ impl GameLoop for LogicLoop {
                 SimulationContent::Pulley => self.simulation.pulley(),
                 SimulationContent::PulleyAndRail => self.simulation.pulley_and_rail(),
                 SimulationContent::Bridge => self.simulation.bridge(),
+                SimulationContent::BridgeSoft => self.simulation.bridge_soft(),
             };
         }
 

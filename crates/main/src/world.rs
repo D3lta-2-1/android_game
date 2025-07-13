@@ -3,7 +3,7 @@ pub mod constraints;
 
 use crate::world::components::{Acceleration, Mass, Position, SubjectToPhysic, Velocity};
 use crate::world::constraints::{
-    AnchorConstraint, Constraint, ConstraintWidget, DistanceConstraint, PlaneConstraint,
+    AnchorConstraint, ConstraintExpression, ConstraintWidget, DistanceConstraint, PlaneConstraint,
     PulleyConstraint,
 };
 use hecs::{Entity, World};
@@ -21,10 +21,11 @@ pub enum Solver {
     Pbd,
     HybridV3Pbd,
     FirstOrderSoft,
+    HybridV3Soft,
 }
 
 impl Solver {
-    pub const LIST: [Solver; 10] = [
+    pub const LIST: [Solver; 11] = [
         Solver::FirstOrder,
         Solver::SecondOrder,
         Solver::FirstOrderWithPrepass,
@@ -35,18 +36,24 @@ impl Solver {
         Solver::Pbd,
         Solver::HybridV3Pbd,
         Solver::FirstOrderSoft,
+        Solver::HybridV3Soft,
     ];
+}
+
+struct Constraint {
+    expression: Box<dyn ConstraintExpression>,
+    stiffness: f32,
+    damping: f32,
 }
 pub struct GameContent {
     pub world: World,
     physic_index_to_entity: Vec<Entity>,
-    constraints: Vec<Box<dyn Constraint>>,
+    constraints: Vec<Constraint>,
     applied_correction: DVector<f32>,
     gravity: Vector2<f32>,
     time_step: f32,
     age: u32,
     calculation_time: Duration,
-    violation_mean: f32,
     pub solver: Solver,
 }
 
@@ -61,7 +68,6 @@ impl GameContent {
             time_step,
             age: 0,
             calculation_time: Duration::from_millis(0),
-            violation_mean: 0.0,
             solver: Solver::HybridV3,
         }
     }
@@ -89,15 +95,19 @@ impl GameContent {
         ))
     }
 
-    pub fn add_constraint(&mut self, constraint: impl Constraint + 'static) {
-        self.constraints.push(Box::new(constraint));
+    pub fn add_stiff_constraint(&mut self, constraint: impl ConstraintExpression + 'static) {
+        self.constraints.push(Constraint{
+            expression: Box::new(constraint),
+            stiffness: f32::INFINITY,
+            damping: 0.0,
+        });
     }
 
     pub fn simple(&mut self) {
         self.clear();
         self.gravity = Vector2::new(0.0, -9.81);
         let body = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 12.0), 1.0);
-        self.add_constraint(AnchorConstraint {
+        self.add_stiff_constraint(AnchorConstraint {
             body,
             anchor: Vector2::new(0.0, 0.0),
             distance: 1.0,
@@ -109,12 +119,12 @@ impl GameContent {
         self.gravity = Vector2::new(0.0, -9.81);
         let body1 = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 0.0), 1.0);
         let body2 = self.add_body(Vector2::new(1.0, 1.0), Vector2::new(-0.0, 0.0), 1.0);
-        self.add_constraint(DistanceConstraint {
+        self.add_stiff_constraint(DistanceConstraint {
             body_a: body1,
             body_b: body2,
             distance: 1.0,
         });
-        self.add_constraint(AnchorConstraint {
+        self.add_stiff_constraint(AnchorConstraint {
             body: body1,
             anchor: Vector2::new(0.0, 0.0),
             distance: 1.0,
@@ -127,17 +137,17 @@ impl GameContent {
         let body1 = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 0.0), 1.0);
         let body2 = self.add_body(Vector2::new(1.0, 1.0), Vector2::new(-0.0, 0.0), 1.0);
         let body3 = self.add_body(Vector2::new(2.0, 1.0), Vector2::new(-0.0, 0.0), 1.0);
-        self.add_constraint(DistanceConstraint {
+        self.add_stiff_constraint(DistanceConstraint {
             body_a: body1,
             body_b: body2,
             distance: 1.0,
         });
-        self.add_constraint(DistanceConstraint {
+        self.add_stiff_constraint(DistanceConstraint {
             body_a: body2,
             body_b: body3,
             distance: 1.0,
         });
-        self.add_constraint(AnchorConstraint {
+        self.add_stiff_constraint(AnchorConstraint {
             body: body1,
             anchor: Vector2::new(0.0, 0.0),
             distance: 1.0,
@@ -155,7 +165,7 @@ impl GameContent {
                 0.1,
             );
             if let Some(last_body) = last_body {
-                self.add_constraint(DistanceConstraint {
+                self.add_stiff_constraint(DistanceConstraint {
                     body_a: last_body,
                     body_b: body,
                     distance: 0.25,
@@ -164,7 +174,7 @@ impl GameContent {
             last_body = Some(body);
         }
         if let Some(last_body) = last_body {
-            self.add_constraint(AnchorConstraint {
+            self.add_stiff_constraint(AnchorConstraint {
                 body: last_body,
                 anchor: Vector2::new(0.0, 0.0),
                 distance: 0.25,
@@ -177,23 +187,23 @@ impl GameContent {
         self.gravity = Vector2::new(0.0, -9.81);
         let body1 = self.add_body(Vector2::new(-1.0, 1.0), Vector2::new(-1.0, 1.0), 1.0);
         let body2 = self.add_body(Vector2::new(1.0, 1.0), Vector2::new(0.0, 0.0), 1.0);
-        self.add_constraint(DistanceConstraint {
+        self.add_stiff_constraint(DistanceConstraint {
             body_a: body1,
             body_b: body2,
             distance: 2.0,
         });
         let body3 = self.add_body(Vector2::new(0.0, 1.0), Vector2::new(0.0, 0.0), 1.0);
-        self.add_constraint(PlaneConstraint::new(
+        self.add_stiff_constraint(PlaneConstraint::new(
             body1,
             Vector2::new(1.0, 1.0),
             Vector2::new(-1.0, 1.0),
         ));
-        self.add_constraint(PlaneConstraint::new(
+        self.add_stiff_constraint(PlaneConstraint::new(
             body2,
             Vector2::new(-1.0, 1.0),
             Vector2::new(1.0, 1.0),
         ));
-        self.add_constraint(DistanceConstraint {
+        self.add_stiff_constraint(DistanceConstraint {
             body_a: body1,
             body_b: body3,
             distance: 1.0,
@@ -203,41 +213,18 @@ impl GameContent {
     pub fn structure(&mut self) {
         self.clear();
         self.gravity = Vector2::new(0.0, -9.81);
-        let b1 = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 0.0), 1.0);
-        let b2 = self.add_body(Vector2::new(1.25, 0.25), Vector2::new(0.0, 0.0), 1.0);
-        let b3 = self.add_body(Vector2::new(1.5, 0.0), Vector2::new(0.0, 0.0), 1.0);
-        let b4 = self.add_body(Vector2::new(1.25, -0.25), Vector2::new(0.0, 0.0), 1.0);
-        let r2 = 2.0f32.sqrt() * 0.25;
-        self.add_constraint(AnchorConstraint {
-            body: b2,
-            anchor: Vector2::new(0.0, 0.5),
-            distance: r2,
-        });
-        self.add_constraint(DistanceConstraint {
-            body_a: b1,
-            body_b: b2,
-            distance: r2,
-        });
-        self.add_constraint(DistanceConstraint {
-            body_a: b2,
-            body_b: b3,
-            distance: r2,
-        });
-        self.add_constraint(DistanceConstraint {
-            body_a: b3,
-            body_b: b4,
-            distance: r2,
-        });
-        self.add_constraint(DistanceConstraint {
-            body_a: b4,
-            body_b: b1,
-            distance: r2,
-        });
-        self.add_constraint(DistanceConstraint {
-            body_a: b1,
-            body_b: b3,
+        let bodies = [
+            self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(1.25, 0.25), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(1.25, -0.25), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(1.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
+        ];
+        self.add_stiff_constraint(AnchorConstraint {
+            body: bodies[0],
+            anchor: Vector2::new(0.0, 0.0),
             distance: 1.0,
         });
+        self.add_triangle_strip(&bodies, f32::INFINITY, 0.0);
     }
 
     pub fn pulley(&mut self) {
@@ -245,7 +232,7 @@ impl GameContent {
         self.gravity = Vector2::new(0.0, -9.81);
         let b1 = self.add_body(Vector2::new(-1.0, 0.0), Vector2::new(5.0, 0.0), 1.0);
         let b2 = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(-1.0, 0.0), 1.0);
-        self.add_constraint(PulleyConstraint {
+        self.add_stiff_constraint(PulleyConstraint {
             body_a: b1,
             body_b: b2,
             anchor_a: Vector2::new(-1.0, 1.0),
@@ -259,12 +246,12 @@ impl GameContent {
         self.gravity = Vector2::new(0.0, -9.8);
         let b1 = self.add_body(Vector2::new(-5.0, 0.0), Vector2::new(0.0, 0.0), 1.0);
         let b2 = self.add_body(Vector2::new(1.0, 0.0), Vector2::new(5.0, 0.0), 2.0);
-        self.add_constraint(PlaneConstraint::new(
+        self.add_stiff_constraint(PlaneConstraint::new(
             b1,
             Vector2::new(0.0, 1.0),
             Vector2::new(0.0, 0.0),
         ));
-        self.add_constraint(PulleyConstraint {
+        self.add_stiff_constraint(PulleyConstraint {
             body_a: b1,
             body_b: b2,
             anchor_a: Vector2::new(-1.0, 3.0),
@@ -273,7 +260,7 @@ impl GameContent {
         });
     }
 
-    fn add_triangle_strip(&mut self, entities: &[Entity]) {
+    fn add_triangle_strip(&mut self, entities: &[Entity], stiffness: f32, damping: f32) {
         let view = self.world.view::<&Position>();
 
         let distance = |a, b| {
@@ -283,7 +270,11 @@ impl GameContent {
         };
 
         let mut add_constraint = |a| {
-            self.constraints.push(Box::new(a));
+            self.constraints.push(Constraint{
+                expression: Box::new(a),
+                stiffness,
+                damping,
+            });
         };
 
         if entities.len() < 2 {
@@ -308,6 +299,52 @@ impl GameContent {
         }
     }
 
+    pub fn bridge_soft(&mut self) {
+        self.clear();
+        self.gravity = Vector2::new(0.0, -9.8);
+        let bodies = [
+            self.add_body(Vector2::new(-1.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-1.0, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-1.0, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-0.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-0.5, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-0.0, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(-0.0, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(0.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(0.5, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(1.0, 0.0), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(1.0, 0.5), Vector2::new(0.0, 0.0), 1.0),
+            self.add_body(Vector2::new(1.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
+        ];
+        let load = self.add_body(Vector2::new(0.0, 1.0), Vector2::new(0.01, 0.0), 10.0);
+        self.add_stiff_constraint(DistanceConstraint {
+            body_a: bodies[5],
+            body_b: load,
+            distance: 1.0,
+        });
+        self.add_triangle_strip(&bodies, 25_000.0, 0.0);
+        self.add_stiff_constraint(AnchorConstraint {
+            body: bodies[0],
+            anchor: Vector2::new(-2.0, 0.0),
+            distance: 0.5,
+        });
+        self.add_stiff_constraint(AnchorConstraint {
+            body: bodies[0],
+            anchor: Vector2::new(-1.5, 1.0),
+            distance: 1.0,
+        });
+        self.add_stiff_constraint(AnchorConstraint {
+            body: bodies[11],
+            anchor: Vector2::new(1.5, 1.0),
+            distance: 1.0,
+        });
+        /*self.add_constraint(AnchorConstraint {
+            body: bodies[11],
+            anchor: Vector2::new(2.0, 0.0),
+            distance: 1.0,
+        });*/
+    }
+
     pub fn bridge(&mut self) {
         self.clear();
         self.gravity = Vector2::new(0.0, -9.8);
@@ -326,27 +363,32 @@ impl GameContent {
             self.add_body(Vector2::new(1.5, 0.0), Vector2::new(0.0, 0.0), 1.0),
         ];
         let load = self.add_body(Vector2::new(0.0, 1.0), Vector2::new(0.01, 0.0), 10.0);
-        self.add_constraint(DistanceConstraint {
+        self.add_stiff_constraint(DistanceConstraint {
             body_a: bodies[5],
             body_b: load,
             distance: 1.0,
         });
-        self.add_triangle_strip(&bodies);
-        self.add_constraint(AnchorConstraint {
+        self.add_triangle_strip(&bodies, f32::INFINITY, 0.0);
+        self.add_stiff_constraint(AnchorConstraint {
             body: bodies[0],
             anchor: Vector2::new(-2.0, 0.0),
             distance: 0.5,
         });
-        self.add_constraint(AnchorConstraint {
+        self.add_stiff_constraint(AnchorConstraint {
             body: bodies[0],
             anchor: Vector2::new(-1.5, 1.0),
             distance: 1.0,
         });
-        self.add_constraint(AnchorConstraint {
+        self.add_stiff_constraint(AnchorConstraint {
             body: bodies[11],
             anchor: Vector2::new(1.5, 1.0),
             distance: 1.0,
         });
+        /*self.add_constraint(AnchorConstraint {
+            body: bodies[11],
+            anchor: Vector2::new(2.0, 0.0),
+            distance: 1.0,
+        });*/
     }
 
     /// update all indices for all the bodies... this theoretically be lazy, but exact solver are slow anyway
@@ -387,7 +429,7 @@ impl GameContent {
         let row_iter = j.row_iter_mut();
         let constraint_iter = self.constraints.iter();
         for (row, constraint) in row_iter.zip(constraint_iter) {
-            constraint.build_j_row(&view, row);
+            constraint.expression.build_j_row(&view, row);
         }
         j
     }
@@ -428,7 +470,7 @@ impl GameContent {
             self.constraints.len(),
             self.constraints
                 .iter()
-                .map(|c| c.compute_j_dot_q_dot(&view)),
+                .map(|c| c.expression.compute_j_dot_q_dot(&view)),
         )
     }
 
@@ -443,7 +485,7 @@ impl GameContent {
             self.constraints.len(),
             self.constraints
                 .iter()
-                .map(|c| c.compute_ddot_q_dot_plus_j_dot_q_ddot(&view)),
+                .map(|c| c.expression.compute_ddot_q_dot_plus_j_dot_q_ddot(&view)),
         )
     }
 
@@ -453,25 +495,51 @@ impl GameContent {
         let len = self.constraints.len();
         DVector::from_iterator(
             len,
-            self.constraints.iter().map(|c| c.evaluate_c_dot(&view)),
+            self.constraints.iter().map(|c| c.expression.evaluate_c_dot(&view)),
         )
     }
 
-    fn c_vector(&mut self) -> DVector<f32> {
+    fn c_vector(&self) -> DVector<f32> {
         let mut query = self.world.query::<&Position>();
         let view = query.view();
-        let mut acc = 0.0;
         let len = self.constraints.len();
-        let vec = DVector::from_iterator(
+        DVector::from_iterator(
             len,
             self.constraints.iter().map(|c| {
-                let c = c.evaluate_c(&view);
-                acc += c.abs();
-                c
+                c.expression.evaluate_c(&view)
             }),
+        )
+    }
+
+    fn gamma_matrix(&self) -> DMatrix<f32> {
+        let size = self.constraints.len();
+        let gamma = DMatrix::from_fn(
+            size,
+            size,
+            |i, j| {
+                if i == j {
+                    let constraint = &self.constraints[i];
+                    (constraint.damping + self.time_step * &constraint.stiffness).recip()  } else { 0.0 }
+            },
         );
-        self.violation_mean = acc / len as f32;
-        vec
+        gamma
+    }
+
+    fn beta_c_over_h_vector(&mut self) -> DVector<f32> {
+        let mut c = self.c_vector();
+        c.iter_mut().enumerate().for_each(|(i, c)| {
+            let constraint = &self.constraints[i];
+            let beta = if constraint.stiffness.is_infinite() {
+                1.0
+            }
+            else {
+                (self.time_step * constraint.stiffness) / (constraint.damping + self.time_step * &constraint.stiffness)
+            };
+
+
+            *c *= beta/self.time_step;
+        });
+        c
     }
 
     pub fn take_snapshot(&mut self) -> WorldSnapshot {
@@ -487,6 +555,28 @@ impl GameContent {
 
         let mut query = self.world.query::<&Position>();
         let view = query.view();
+        let (elastic_energy, violation_sum) = self
+            .constraints
+            .iter()
+            .map(|c| {
+                let violation = c.expression.evaluate_c(&view);
+                let absolute_violation = violation.abs();
+                if c.stiffness.is_infinite() {
+                    (0.0, absolute_violation)
+                } else {
+                    (0.5 * c.stiffness * violation * violation, absolute_violation)
+                }
+            } )
+            .fold((0.0, 0.0), |(a, b), (c, d)| (a + c, b + d));
+
+        let violation_mean = if self.constraints.is_empty() {
+            0.0
+        } else {
+            violation_sum / self.constraints.len() as f32
+        };
+
+        let mut query = self.world.query::<&Position>();
+        let view = query.view();
         let pos = self
             .physic_index_to_entity
             .iter()
@@ -498,17 +588,18 @@ impl GameContent {
         let view = query.view();
         let convertor = |e: Entity| view.get(e).unwrap().0;
 
-        let widget_iter = self.constraints.iter().map(|c| c.widget(&convertor));
+        let widget_iter = self.constraints.iter().map(|c| c.expression.widget(&convertor));
         let force_iter = self.applied_correction.iter().cloned();
         let links = widget_iter.zip(force_iter).collect();
 
         let r = WorldSnapshot {
             pos,
-            links, // TODO: FIX constraint link
+            links,
             kinetic_energy,
             potential_energy,
+            elastic_energy,
             date: self.age,
-            violation_mean: self.violation_mean,
+            violation_mean,
             calculation_time: self.calculation_time,
         };
         self.age += 1;
@@ -526,11 +617,12 @@ impl GameContent {
             Solver::FirstOrderWithPrepass => self.first_order_with_prepass(),
             Solver::HybridV2 => self.hybrid_v2(),
             Solver::HybridV3 => self.hybrid_v3(),
-            Solver::HybridV3cgm => self.hydrid_v3_cgm(),
+            Solver::HybridV3cgm => self.hybrid_v3_cgm(),
             Solver::HybridV4 => self.hybrid_v4(),
             Solver::Pbd => self.pdb(),
             Solver::HybridV3Pbd => self.hybrid_v3_pbd(),
             Solver::FirstOrderSoft => self.first_order_soft(),
+            Solver::HybridV3Soft => self.hybrid_v3_soft(),
         }
         self.calculation_time = begin.elapsed();
     }
@@ -760,6 +852,7 @@ impl GameContent {
         let j = self.j_matrix();
         let jt = j.transpose();
         let k = &j * &inv_mass_matrix * &jt;
+        let j_dot_q_dot = self.j_dot_q_dot();
 
         for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
             // euler integration
@@ -768,9 +861,6 @@ impl GameContent {
 
         // this velocity vector tends to violate the constraints
         let q_dot = self.q_dot_vector();
-        let j_dot_q_dot = self.j_dot_q_dot();
-
-        let _c = self.c_vector();
 
         let cholesky = k.cholesky().unwrap();
         let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5;
@@ -793,7 +883,7 @@ impl GameContent {
         }
     }
 
-    fn hydrid_v3_cgm(&mut self) {
+    fn hybrid_v3_cgm(&mut self) {
         let inv_mass_matrix = self.inv_mass_matrix();
         let j = self.j_matrix();
         let jt = j.transpose();
@@ -807,8 +897,6 @@ impl GameContent {
         // this velocity vector tends to violate the constraints
         let q_dot = self.q_dot_vector();
         let j_dot_q_dot = self.j_dot_q_dot();
-
-        let _c = self.c_vector();
 
         let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5;
 
@@ -850,6 +938,10 @@ impl GameContent {
         let jt = j.transpose();
         let k = &j * &inv_mass_matrix * &jt;
 
+        let j_dot_q_dot = self.j_dot_q_dot();
+
+        let scary_thing = self.compute_ddot_q_dot_plus_j_dot_q_ddot();
+
         for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
             // euler integration
             velocity.0 += self.gravity * self.time_step;
@@ -857,9 +949,6 @@ impl GameContent {
 
         // this velocity vector tends to violate the constraints
         let q_dot = self.q_dot_vector();
-        let j_dot_q_dot = self.j_dot_q_dot();
-
-        let scary_thing = self.compute_ddot_q_dot_plus_j_dot_q_ddot();
         let cholesky = k.cholesky().unwrap();
 
         let b = -j * q_dot
@@ -880,8 +969,6 @@ impl GameContent {
             velocity.0 += momentum * mass.inv_mass;
             pos.actual += velocity.0 * self.time_step;
         }
-
-        let _c = self.c_vector();
     }
 
     fn pdb(&mut self) {
@@ -926,8 +1013,6 @@ impl GameContent {
         let q_dot = self.q_dot_vector();
         let j_dot_q_dot = self.j_dot_q_dot();
 
-        let _c = self.c_vector();
-
         let cholesky = k.cholesky().unwrap();
         let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5;
         let lambda = cholesky.solve(&b);
@@ -966,19 +1051,14 @@ impl GameContent {
     }
 
     fn first_order_soft(&mut self) {
-        let omega = 15.0f32 * 2.0 * std::f32::consts::TAU; // this is the "frequency" in radians per second,
-        let zeta = 0.0f32; // this is the "damping" of the constraint, inverse of the number of oscillations, if set to 0, we find an harmonic oscillator, if set to 1, we find a critically damped system, if set to 2, we find an over damped system
-
         let inv_mass_matrix = self.inv_mass_matrix();
         let j = self.j_matrix();
         let jt = j.transpose();
         let m_eff = &j * &inv_mass_matrix * &jt;
-        let c = 2.0 * zeta * omega * &m_eff;
-        let k_stiffness = omega * omega * &m_eff; // stiffness of the constraint, this is the "spring constant" of the constraint, 1.0 is a good value, but can be tuned
-        let gamma = (c + self.time_step * &k_stiffness).try_inverse().unwrap();
-        let beta = self.time_step * &gamma * k_stiffness;
 
-        let k = m_eff + gamma; // add a little bit of stiffness to the system, so it doesn't collapse
+        let gamma = self.gamma_matrix();
+
+        let k = m_eff + (1.0 / self.time_step) * gamma;
 
         for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
             // euler integration
@@ -987,12 +1067,50 @@ impl GameContent {
 
         // this velocity vector tends to violate the constraints
         let q_dot = self.q_dot_vector();
-        let c = self.c_vector();
 
         let cholesky = k.cholesky().unwrap();
-        let b = -j * q_dot - (beta / self.time_step) * c;
+        let b = -j * q_dot - self.beta_c_over_h_vector();
         let lambda = cholesky.solve(&b);
         self.applied_correction = &lambda / self.time_step;
+        let applied_momentum = jt * &lambda;
+
+        // correct the velocity
+        for (i, (_, (pos, velocity, mass))) in self
+            .world
+            .query::<(&mut Position, &mut Velocity, &Mass)>()
+            .iter()
+            .enumerate()
+        {
+            let momentum = Vector2::new(applied_momentum[i * 2], applied_momentum[i * 2 + 1]);
+            velocity.0 += momentum * mass.inv_mass;
+            pos.actual += velocity.0 * self.time_step;
+        }
+    }
+
+    fn hybrid_v3_soft(&mut self) {
+        let inv_mass_matrix = self.inv_mass_matrix();
+        let j = self.j_matrix();
+        let jt = j.transpose();
+        let m_eff = &j * &inv_mass_matrix * &jt;
+        let gamma = self.gamma_matrix();
+
+        let k = m_eff + (1.0 / self.time_step) * gamma;
+        let j_dot_q_dot = self.j_dot_q_dot();
+
+        for (_, velocity) in self.world.query::<&mut Velocity>().iter() {
+            // euler integration
+            velocity.0 += self.gravity * self.time_step;
+        }
+
+        // this velocity vector tends to violate the constraints
+        let q_dot = self.q_dot_vector();
+
+        let cholesky = k.cholesky().unwrap();
+        let b = -j * q_dot - j_dot_q_dot * self.time_step * 0.5 - self.beta_c_over_h_vector();
+        let lambda = cholesky.solve(&b);
+
+        self.applied_correction = &lambda / self.time_step; //since we are working with momentum, we need to divide by the time step to get the applied force
+
         let applied_momentum = jt * &lambda;
 
         // correct the velocity
@@ -1016,6 +1134,7 @@ pub struct WorldSnapshot {
     pub links: Vec<(ConstraintWidget, f32)>,
     pub kinetic_energy: f32,
     pub potential_energy: f32,
+    pub elastic_energy: f32,
     pub date: u32,
     pub calculation_time: Duration,
     pub violation_mean: f32,

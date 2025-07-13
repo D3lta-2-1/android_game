@@ -10,7 +10,7 @@ pub enum ConstraintWidget {
     Pulley(usize, usize, Vector2<f32>, Vector2<f32>),
 }
 
-pub trait Constraint: Send + Sync {
+pub trait ConstraintExpression: Send + Sync {
     fn build_j_row(
         &self,
         bodies: &View<(&Position, &SubjectToPhysic)>,
@@ -43,7 +43,7 @@ pub struct DistanceConstraint {
     pub distance: f32,
 }
 
-impl Constraint for DistanceConstraint {
+impl ConstraintExpression for DistanceConstraint {
     fn build_j_row(
         &self,
         bodies: &View<(&Position, &SubjectToPhysic)>,
@@ -147,7 +147,7 @@ pub struct AnchorConstraint {
     pub distance: f32,
 }
 
-impl Constraint for AnchorConstraint {
+impl ConstraintExpression for AnchorConstraint {
     fn build_j_row(
         &self,
         bodies: &View<(&Position, &SubjectToPhysic)>,
@@ -239,7 +239,7 @@ impl PlaneConstraint {
     }
 }
 
-impl Constraint for PlaneConstraint {
+impl ConstraintExpression for PlaneConstraint {
     fn build_j_row(
         &self,
         bodies: &View<(&Position, &SubjectToPhysic)>,
@@ -282,7 +282,7 @@ pub struct PulleyConstraint {
     pub distance: f32,
 }
 
-impl Constraint for PulleyConstraint {
+impl ConstraintExpression for PulleyConstraint {
     fn build_j_row(
         &self,
         bodies: &View<(&Position, &SubjectToPhysic)>,
