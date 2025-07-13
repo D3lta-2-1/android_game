@@ -787,12 +787,11 @@ impl GameContent {
         let k = &j * &inv_mass_matrix * &jt;
         let cholesky = k.cholesky().unwrap();
         let inv_k = cholesky.inverse();
-        let c = self.c_vector();
 
         // first, make velocity valid in this position
         let q_dot = self.q_dot_vector();
 
-        let b = -&j * q_dot - (0.0 / self.time_step) * &c; //no Baumgarte for now
+        let b = -&j * q_dot; //no Baumgarte for now
         let lambda = &inv_k * b;
         let applied_momentum = &jt * &lambda;
 
@@ -809,12 +808,9 @@ impl GameContent {
         let force = self.force_vector();
         let j_w_q2dot = &j * &inv_mass_matrix * &force;
         let j_dot_q_dot = self.j_dot_q_dot();
-        let c_dot = self.c_dot_vector();
 
         let b = -j_w_q2dot
-            - j_dot_q_dot
-            - (0.0 / self.time_step) * c_dot
-            - (0.0 / (self.time_step * self.time_step)) * c;
+            - j_dot_q_dot;
         let lambda = inv_k * b;
         let applied_force = (jt * &lambda) + force;
 
